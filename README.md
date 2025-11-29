@@ -3,7 +3,6 @@
 API RESTful desarrollada en Node.js y TypeScript que implementa una capa de seguridad basada en autenticación y autorización por roles...
 Las entidades principales son:
 - **👤 User**
-- **🛡️ Role**
 
 ## 🚀 Características
 - `API RESTful` modularizada en rutas y controladores
@@ -41,10 +40,9 @@ Crear un archivo .env en la raíz del proyecto basado en .envexample
  npm run build
  
  # Iniciar servidor 
- npm run start
+ npm run dev
 ```
 ## 🧭 Rutas base de la API
 ```bash
  /api/users
- /api/roles
 ```

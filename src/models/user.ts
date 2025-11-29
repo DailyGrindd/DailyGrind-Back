@@ -37,7 +37,7 @@ const userSchema = new mongoose.Schema({
         },
         zone: {
             type: String,
-            required: [true, 'Tu ubicacion es obligatoria']
+            required: [true, 'La ubicacion es obligatoria']
         }
     },
     stats: {
