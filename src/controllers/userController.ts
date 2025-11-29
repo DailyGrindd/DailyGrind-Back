@@ -75,7 +75,7 @@ export const login = async (req: Request, res: Response) => {
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7d
         });
 
-        res.status(200).json({ messaje: "Login exitoso", user: { email: user.email, role: user.role } });
+        res.status(200).json({ messaje: "Login exitoso", user: { email: user.email, role: user.role, level: user.level, displayName: user.profile?.displayName, totalPoints: user.stats?.totalPoints } });
     }
     catch (error) {
         res.status(500).json({ error: error });
@@ -101,7 +101,10 @@ export const userAccess = async (req: Request, res: Response) => {
             isAuthenticated: true,
             email: user.email,
             name: user.userName,
-            role: user.role
+            role: user.role,
+            level: user.level,
+            displayName: user.profile?.displayName,
+            totalPoints: user.stats?.totalPoints
         });
 
     } catch (error) {
