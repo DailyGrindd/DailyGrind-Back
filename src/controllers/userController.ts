@@ -111,3 +111,37 @@ export const userAccess = async (req: Request, res: Response) => {
         return res.status(500).json({ isAuthenticated: false, error });
     }
 };
+
+// Verificar disponibilidad de email o username
+export const checkAvailability = async (req: Request, res: Response) => {
+    try {
+        const { email, userName } = req.query;
+
+        if (!email && !userName) {
+            return res.status(400).json({ error: "Debes proporcionar email o userName" });
+        }
+
+        const result: any = {};
+
+        if (email) {
+            const emailExists = await User.findOne({ email });
+            result.email = {
+                value: email,
+                available: !emailExists
+            };
+        }
+
+        if (userName) {
+            const userNameExists = await User.findOne({ userName });
+            result.userName = {
+                value: userName,
+                available: !userNameExists
+            };
+        }
+
+        return res.status(200).json(result);
+
+    } catch (error) {
+        return res.status(500).json({ error: "Error al verificar disponibilidad" });
+    }
+};

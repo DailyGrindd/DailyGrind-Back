@@ -4,6 +4,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import userRoutes from "./routes/userRoutes"
+import challengeRoutes from "./routes/challengeRoutes"
 import cookieParser from "cookie-parser";
 
 dotenv.config();
@@ -19,6 +20,7 @@ app.use(cors({
 app.use(cookieParser());
 
 app.use('/api/users', userRoutes);
+app.use('/api/challenges', challengeRoutes);
 
 app.listen(port, () => {
     console.log(`APP escuchando on port ${port}`)

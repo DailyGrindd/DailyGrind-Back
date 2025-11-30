@@ -10,6 +10,15 @@ class isEmailUnique implements ValidatorConstraintInterface {
     defaultMessage = () => "El correo ya está en uso";
 }
 
+@ValidatorConstraint({ async: true })
+class isUserNameUnique implements ValidatorConstraintInterface {
+    async validate(userName: string) {
+        const user = await userModel.findOne({ userName });
+        return !user;
+    }
+    defaultMessage = () => "El nombre de usuario ya está en uso";
+}
+
 class isEmailUniqueUpdate implements ValidatorConstraintInterface {
     async validate(email: string, args: ValidationArguments) {
         const userId = (args.object as any).id;
@@ -28,6 +37,7 @@ export class CreateUserDto {
     @IsString({ message: "El nombre debe ser un texto" })
     @MinLength(3, { message: "El nombre debe tener al menos 3 caracteres" })
     @IsNotEmpty({ message: "El nombre del usuario es obligatorio" })
+    @Validate(isUserNameUnique)
     userName!: string;
 
     @IsEmail({}, { message: "El correo no tiene un formato válido" })
