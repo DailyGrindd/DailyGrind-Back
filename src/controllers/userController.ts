@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import User from "../models/user";
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
+import jwt, { SignOptions } from "jsonwebtoken";
+import { auth } from "../config/firebase";
 
 // Crear usuarios para administradores
 export const createUser = async (req: Request, res: Response) => {
@@ -50,14 +51,14 @@ export const login = async (req: Request, res: Response) => {
 
         const accessToken = jwt.sign(
             { email: user.email, role: user.role },
-            process.env.JWT_SECRET as string,
-            { expiresIn: process.env.JWT_EXPIRES_IN }
+            process.env.JWT_SECRET!,
+            { expiresIn: '15m' }
         );
 
         const refreshToken = jwt.sign(
             { email: user.email, role: user.role },
-            process.env.JWT_REFRESH_SECRET as string,
-            { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d" }
+            process.env.JWT_REFRESH_SECRET!,
+            { expiresIn: '7d' }
         );
 
         // Cookie 
@@ -143,5 +144,180 @@ export const checkAvailability = async (req: Request, res: Response) => {
 
     } catch (error) {
         return res.status(500).json({ error: "Error al verificar disponibilidad" });
+    }
+};
+
+// Registro con Firebase (solo email/password en Firebase, resto manual)
+export const firebaseRegister = async (req: Request, res: Response) => {
+    try {
+        const { idToken, userName, displayName, avatarUrl, isPublic, zone } = req.body;
+
+        if (!idToken) {
+            return res.status(400).json({ error: "Token de Firebase requerido" });
+        }
+
+        if (!userName || !displayName || !zone) {
+            return res.status(400).json({ error: "userName, displayName y zone son obligatorios" });
+        }
+
+        // Verificar el token de Firebase
+        const decodedToken = await auth.verifyIdToken(idToken);
+        const { uid, email } = decodedToken;
+
+        if (!email) {
+            return res.status(400).json({ error: "Email no encontrado en el token" });
+        }
+
+        // Verificar si el usuario ya existe
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ error: "El usuario ya existe" });
+        }
+
+        // Verificar que el userName no esté en uso
+        const existingUserName = await User.findOne({ userName });
+        if (existingUserName) {
+            return res.status(400).json({ error: "El nombre de usuario ya está en uso" });
+        }
+
+        // Crear nuevo usuario con los datos del formulario
+        const user = await User.create({
+            userName,
+            email,
+            password: uid, // Usamos el UID de Firebase como password (no se usará para login tradicional)
+            role: "Usuario",
+            level: 1,
+            profile: {
+                displayName,
+                avatarUrl: avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName}`,
+                isPublic: isPublic !== undefined ? isPublic : true,
+                zone
+            }
+        });
+
+        // Generar tokens JWT propios
+        const accessToken = jwt.sign(
+            { email: user.email, role: user.role },
+            process.env.JWT_SECRET!,
+            { expiresIn: '15m' }
+        );
+
+        const refreshToken = jwt.sign(
+            { email: user.email, role: user.role },
+            process.env.JWT_REFRESH_SECRET!,
+            { expiresIn: '7d' }
+        );
+
+        // Establecer cookies
+        res.cookie("accessToken", accessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: 15 * 60 * 1000, // 15m
+        });
+
+        res.cookie("refreshToken", refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7d
+        });
+
+        res.status(201).json({
+            message: "Usuario registrado exitosamente con Firebase",
+            user: {
+                email: user.email,
+                userName: user.userName,
+                role: user.role,
+                level: user.level,
+                displayName: user.profile?.displayName,
+                avatarUrl: user.profile?.avatarUrl
+            }
+        });
+
+    } catch (error: any) {
+        console.error("Error en registro Firebase:", error);
+        res.status(500).json({
+            error: "Error al registrar con Firebase",
+            details: error.message
+        });
+    }
+};
+
+// Login con Firebase (solo verifica email/password en Firebase)
+export const firebaseLogin = async (req: Request, res: Response) => {
+    try {
+        const { idToken } = req.body;
+
+        if (!idToken) {
+            return res.status(400).json({ error: "Token de Firebase requerido" });
+        }
+
+        // Verificar el token de Firebase
+        const decodedToken = await auth.verifyIdToken(idToken);
+        const { email } = decodedToken;
+
+        if (!email) {
+            return res.status(400).json({ error: "Email no encontrado en el token" });
+        }
+
+        // Buscar el usuario en la base de datos
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ error: "Usuario no encontrado. Debes registrarte primero." });
+        }
+
+        // Generar tokens JWT propios
+        const accessToken = jwt.sign(
+            { email: user.email, role: user.role },
+            process.env.JWT_SECRET!,
+            { expiresIn: '15m' }
+        );
+
+        const refreshToken = jwt.sign(
+            { email: user.email, role: user.role },
+            process.env.JWT_REFRESH_SECRET!,
+            { expiresIn: '7d' }
+        );
+
+        // Establecer cookies
+        res.cookie("accessToken", accessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: 15 * 60 * 1000, // 15m
+        });
+
+        res.cookie("refreshToken", refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7d
+        });
+
+        // Actualizar última actividad
+        user.lastActive = new Date();
+        await user.save();
+
+        res.status(200).json({
+            message: "Login exitoso con Firebase",
+            user: {
+                email: user.email,
+                userName: user.userName,
+                role: user.role,
+                level: user.level,
+                displayName: user.profile?.displayName,
+                totalPoints: user.stats?.totalPoints,
+                avatarUrl: user.profile?.avatarUrl
+            }
+        });
+
+    } catch (error: any) {
+        console.error("Error en login Firebase:", error);
+        res.status(500).json({
+            error: "Error al hacer login con Firebase",
+            details: error.message
+        });
     }
 };

@@ -36,8 +36,8 @@ export function validateRefreshToken(req: Request, res: Response, next: NextFunc
         // Nuevo access token
         const newAccessToken = jwt.sign(
             { email: decoded.email, role: decoded.role },
-            process.env.JWT_SECRET as string,
-            { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+            process.env.JWT_SECRET!,
+            { expiresIn: '15m' }
         );
 
         res.cookie("accessToken", newAccessToken, {
