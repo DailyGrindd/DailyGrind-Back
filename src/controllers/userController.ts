@@ -172,9 +172,10 @@ export const userAccess = async (req: Request, res: Response) => {
             name: user.userName,
             role: user.role,
             level: user.level,
-            displayName: user.profile?.displayName,
-            totalPoints: user.stats?.totalPoints,
-            avatarUrl: user.profile?.avatarUrl
+            totalPoints: user.stats?. totalPoints,
+            avatarUrl: user.profile?. avatarUrl,      
+            zone: user.profile?.zone,                 
+            isPublic: user.profile?.isPublic 
         });
 
     } catch (error) {
