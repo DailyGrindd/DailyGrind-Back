@@ -4,17 +4,44 @@ import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { auth } from "../config/firebase";
 
+// Obtener todos los usuarios o filtrados por role
+export const getUsers = async (req: Request, res: Response) => {
+    try {
+        const role = req.query.role as string | undefined;
+        let users;
+        if (role) {
+            users = await User.find({ role }).select('-profile -stats');
+        } else {
+            users = await User.find().select('-profile -stats');
+        }
+        res.status(200).json(users);
+    } catch (error) {
+        res.status(500).json({ error: error });
+    }
+};
+
+// Obtener un usuario por email
+export const getUser = async (req: Request, res: Response) => {
+    try {
+        const user = await User.findOne({ email: req.params.email });
+        if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+        res.status(200).json(user);
+    } catch (error) {
+        res.status(500).json({ error: error });
+    }
+};
+
 // Crear usuarios para administradores
 export const createUser = async (req: Request, res: Response) => {
     try {
         const { userName, email, password, role, displayName, avatarUrl, isPublic, zone } = req.body;
         const pass_hash = await bcrypt.hash(password, 10);
-        
+
         const user = await User.create({
             userName, email, password: pass_hash, role, level: 1,
-            profile: { displayName, avatarUrl, isPublic, zone } 
+            profile: { displayName, avatarUrl, isPublic, zone }
         });
-        
+
         res.status(201).json(user);
     } catch (error) {
         res.status(500).json({ error: error });
@@ -26,17 +53,58 @@ export const registerUser = async (req: Request, res: Response) => {
     try {
         const { userName, email, password, displayName, avatarUrl, isPublic, zone } = req.body;
         const pass_hash = await bcrypt.hash(password, 10);
-        
+
         const user = await User.create({
             userName, email, password: pass_hash, role: "Usuario", level: 1,
-            profile: { displayName, avatarUrl, isPublic, zone } 
+            profile: { displayName, avatarUrl, isPublic, zone }
         });
-        
-        res.status(201).json(user);
+
+        res.status(201).json({ user: { email: user.email, role: user.role, level: user.level, displayName: user.profile?.displayName, totalPoints: user.stats?.totalPoints, avatarUrl: user.profile?.avatarUrl }});
     } catch (error) {
         res.status(500).json({ error: error });
     }
 };
+
+// Update de usuarios parte admin
+export const updateUser = async (req: Request, res: Response) => {
+    try {
+        const user = await User.findOne({ email: req.params.email });
+        if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+
+        const { password, role, level, ...profileUpdates } = req.body;
+        
+        if (password) {
+            const pass_hash = await bcrypt.hash(password, 10);
+            user.password = pass_hash;
+        }
+
+        if (role) user.role = role;
+        if (level) user.level = level;
+
+        // Actualiza campos de profile si existen
+        if (Object.keys(profileUpdates).length > 0) {
+            user.profile = { ...user.profile, ...profileUpdates };
+        }
+
+        await user.save();
+        res.status(200).json({ message: "Usuario actualizado correctamente", user });
+        
+    } catch (error) {
+        res.status(500).json({ error: error });
+    }
+}
+
+// Eliminacion de usuarios parte admin
+export const deleteUser = async (req: Request, res: Response) => {
+    try {
+        const user = await User.findOneAndDelete({ email: req.params.email });
+        if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+        
+        res.status(200).json({ message: "Usuario eliminado correctamente" });
+    } catch (error) {
+        res.status(500).json({ error: error });
+    }
+}
 
 // Login de usuarios
 export const login = async (req: Request, res: Response) => {
@@ -76,7 +144,7 @@ export const login = async (req: Request, res: Response) => {
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7d
         });
 
-        res.status(200).json({ messaje: "Login exitoso", user: { email: user.email, role: user.role, level: user.level, displayName: user.profile?.displayName, totalPoints: user.stats?.totalPoints } });
+        res.status(200).json({ messaje: "Login exitoso", user: { email: user.email, role: user.role, level: user.level, displayName: user.profile?.displayName, totalPoints: user.stats?.totalPoints, avatarUrl: user.profile?.avatarUrl } });
     }
     catch (error) {
         res.status(500).json({ error: error });
@@ -105,7 +173,8 @@ export const userAccess = async (req: Request, res: Response) => {
             role: user.role,
             level: user.level,
             displayName: user.profile?.displayName,
-            totalPoints: user.stats?.totalPoints
+            totalPoints: user.stats?.totalPoints,
+            avatarUrl: user.profile?.avatarUrl
         });
 
     } catch (error) {
@@ -116,10 +185,10 @@ export const userAccess = async (req: Request, res: Response) => {
 // Verificar disponibilidad de email o username
 export const checkAvailability = async (req: Request, res: Response) => {
     try {
-        const { email, userName } = req.query;
+        const { email, displayName } = req.query;
 
-        if (!email && !userName) {
-            return res.status(400).json({ error: "Debes proporcionar email o userName" });
+        if (!email && !displayName) {
+            return res.status(400).json({ error: "Debes proporcionar email o displayName" });
         }
 
         const result: any = {};
@@ -132,11 +201,11 @@ export const checkAvailability = async (req: Request, res: Response) => {
             };
         }
 
-        if (userName) {
-            const userNameExists = await User.findOne({ userName });
-            result.userName = {
-                value: userName,
-                available: !userNameExists
+        if (displayName) {
+            const displayNameExists = await User.findOne({ "profile.displayName": displayName });
+            result.displayName = {  
+                value: displayName,
+                available: !displayNameExists
             };
         }
 
@@ -174,10 +243,10 @@ export const firebaseRegister = async (req: Request, res: Response) => {
             return res.status(400).json({ error: "El usuario ya existe" });
         }
 
-        // Verificar que el userName no esté en uso
-        const existingUserName = await User.findOne({ userName });
-        if (existingUserName) {
-            return res.status(400).json({ error: "El nombre de usuario ya está en uso" });
+        // Verificar que el displayName no esté en uso
+        const existingDisplayName = await User.findOne({ "profile.displayName": displayName });
+        if (existingDisplayName) {
+            return res.status(400).json({ error: "El nickname ya está en uso" });
         }
 
         // Crear nuevo usuario con los datos del formulario

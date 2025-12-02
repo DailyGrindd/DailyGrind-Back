@@ -11,14 +11,30 @@ class isEmailUnique implements ValidatorConstraintInterface {
 }
 
 @ValidatorConstraint({ async: true })
-class isUserNameUnique implements ValidatorConstraintInterface {
-    async validate(userName: string) {
-        const user = await userModel.findOne({ userName });
+class isDisplayNameUnique implements ValidatorConstraintInterface {
+    async validate(displayName: string) {
+        const user = await userModel.findOne({ displayName });
         return !user;
     }
-    defaultMessage = () => "El nombre de usuario ya está en uso";
+    defaultMessage = () => "El nickname ya está en uso";
 }
 
+@ValidatorConstraint({ async: true })
+class isDisplayNameUniqueUpdate implements ValidatorConstraintInterface {
+    async validate(displayName: string, args: ValidationArguments) {
+        const email = (args.object as any).currentEmail; // Pasar el email actual
+        const user = await userModel.findOne({ "profile.displayName": displayName });
+        
+        if (!user) return true;
+        
+        // Si existe, verifica que sea del mismo usuario
+        return user.email === email;
+    }
+
+    defaultMessage = () => "El nickname ya está en uso";
+}
+
+@ValidatorConstraint({ async: true })
 class isEmailUniqueUpdate implements ValidatorConstraintInterface {
     async validate(email: string, args: ValidationArguments) {
         const userId = (args.object as any).id;
@@ -37,7 +53,6 @@ export class CreateUserDto {
     @IsString({ message: "El nombre debe ser un texto" })
     @MinLength(3, { message: "El nombre debe tener al menos 3 caracteres" })
     @IsNotEmpty({ message: "El nombre del usuario es obligatorio" })
-    @Validate(isUserNameUnique)
     userName!: string;
 
     @IsEmail({}, { message: "El correo no tiene un formato válido" })
@@ -52,6 +67,7 @@ export class CreateUserDto {
     // profile
     @IsString({ message: "El nombre de perfil debe ser un texto" })
     @IsNotEmpty({ message: "El nombre de perfil es obligatorio" })
+    @Validate(isDisplayNameUnique)
     displayName!: string;
 
     @IsOptional()
@@ -79,6 +95,7 @@ export class UpdateUserDto {
     // profile
     @IsString({ message: "El nombre de perfil debe ser un texto" })
     @IsOptional()
+    @Validate(isDisplayNameUniqueUpdate)
     displayName?: string;
 
     @IsOptional()
