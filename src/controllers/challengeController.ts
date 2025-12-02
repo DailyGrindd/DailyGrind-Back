@@ -126,8 +126,8 @@ export const updateChallenge = async (req: Request, res: Response) => {
         const userRole = (req as any).user?.role;
         const userEmail = (req as any).user?.email;
 
-        // Buscar el desafío primero
-        const challenge = await Challenge.findById(id).populate('ownerUser');
+        // Buscar el desafío primero (SIN populate porq generaba problemas)
+        const challenge = await Challenge.findById(id);
 
         if (!challenge) {
             return res.status(404).json({ error: "Desafío no encontrado" });
@@ -185,24 +185,29 @@ export const updateChallenge = async (req: Request, res: Response) => {
 };
 
 // Eliminar un desafío
+// Eliminar desafío (baja lógica - solo cambia isActive a false)
 export const deleteChallenge = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 
-        const challenge = await Challenge.findByIdAndDelete(id);
+        const challenge = await Challenge.findByIdAndUpdate(
+            id,
+            { isActive: false },
+            { new: true }
+        );
 
         if (!challenge) {
             return res.status(404).json({ error: "Desafío no encontrado" });
         }
 
         res.status(200).json({
-            message: "Desafío eliminado exitosamente",
+            message: "Desafío desactivado exitosamente",
             challenge
         });
     } catch (error: any) {
-        console.error("Error al eliminar desafío:", error);
+        console.error("Error al desactivar desafío:", error);
         res.status(500).json({ 
-            error: "Error al eliminar desafío",
+            error: "Error al desactivar desafío",
             details: error.message 
         });
     }

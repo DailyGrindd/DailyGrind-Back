@@ -144,7 +144,18 @@ export const login = async (req: Request, res: Response) => {
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7d
         });
 
-        res.status(200).json({ messaje: "Login exitoso", user: { email: user.email, role: user.role, level: user.level, displayName: user.profile?.displayName, totalPoints: user.stats?.totalPoints, avatarUrl: user.profile?.avatarUrl } });
+        res.status(200).json({ 
+            messaje: "Login exitoso", 
+            user: { 
+                _id: user._id,
+                email: user.email, 
+                role: user.role, 
+                level: user.level, 
+                displayName: user.profile?.displayName, 
+                totalPoints: user.stats?.totalPoints, 
+                avatarUrl: user.profile?.avatarUrl 
+            } 
+        });
     }
     catch (error) {
         res.status(500).json({ error: error });
@@ -168,6 +179,7 @@ export const userAccess = async (req: Request, res: Response) => {
 
         return res.status(200).json({
             isAuthenticated: true,
+            _id: user._id,
             email: user.email,
             name: user.userName,
             role: user.role,
@@ -296,6 +308,7 @@ export const firebaseRegister = async (req: Request, res: Response) => {
         res.status(201).json({
             message: "Usuario registrado exitosamente con Firebase",
             user: {
+                _id: user._id,
                 email: user.email,
                 userName: user.userName,
                 role: user.role,
@@ -373,6 +386,7 @@ export const firebaseLogin = async (req: Request, res: Response) => {
         res.status(200).json({
             message: "Login exitoso con Firebase",
             user: {
+                _id: user._id,
                 email: user.email,
                 userName: user.userName,
                 role: user.role,
