@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import Challenge from "../models/challenge";
+import User from "../models/user";
 
 // Listar todos los desafíos con filtros opcionales
 export const getAllChallenges = async (req: Request, res: Response) => {
@@ -189,16 +190,25 @@ export const updateChallenge = async (req: Request, res: Response) => {
 export const deleteChallenge = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        const userEmail = req.user?.email;
+        const userRole = req.user?.role;
 
-        const challenge = await Challenge.findByIdAndUpdate(
-            id,
-            { isActive: false },
-            { new: true }
-        );
+        const challenge = await Challenge.findById(id);
 
         if (!challenge) {
             return res.status(404).json({ error: "Desafío no encontrado" });
         }
+
+        // Si no es administrador, verificar que sea el owner
+        if (userRole !== "Administrador") {
+            const currentUser = await User.findOne({ email: userEmail });
+            if (!currentUser || !challenge.ownerUser || challenge.ownerUser.toString() !== currentUser._id.toString()) {
+                return res.status(403).json({ error: "No tienes permiso para desactivar este desafío" });
+            }
+        }
+
+        challenge.isActive = false;
+        await challenge.save();
 
         res.status(200).json({
             message: "Desafío desactivado exitosamente",
@@ -208,6 +218,50 @@ export const deleteChallenge = async (req: Request, res: Response) => {
         console.error("Error al desactivar desafío:", error);
         res.status(500).json({ 
             error: "Error al desactivar desafío",
+            details: error.message 
+        });
+    }
+};
+
+// Reactivar desafío (cambia isActive a true, solo el owner o admin)
+export const reactivateChallenge = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const userRole = (req as any).user?.role;
+        const userEmail = (req as any).user?.email;
+
+        // Buscar el desafío
+        const challenge = await Challenge.findById(id);
+
+        if (!challenge) {
+            return res.status(404).json({ error: "Desafío no encontrado" });
+        }
+
+        // Verificar permisos: solo admin o el owner pueden reactivar
+        if (userRole !== "Administrador") {
+            const User = (await import("../models/user")).default;
+            const currentUser = await User.findOne({ email: userEmail });
+            
+            if (!currentUser || !challenge.ownerUser || 
+                challenge.ownerUser.toString() !== currentUser._id.toString()) {
+                return res.status(403).json({ 
+                    error: "No tienes permiso para reactivar este desafío" 
+                });
+            }
+        }
+
+        // Reactivar el desafío
+        challenge.isActive = true;
+        await challenge.save();
+
+        res.status(200).json({
+            message: "Desafío reactivado exitosamente",
+            challenge
+        });
+    } catch (error: any) {
+        console.error("Error al reactivar desafío:", error);
+        res.status(500).json({ 
+            error: "Error al reactivar desafío",
             details: error.message 
         });
     }
