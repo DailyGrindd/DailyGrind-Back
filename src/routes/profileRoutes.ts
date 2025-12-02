@@ -12,6 +12,6 @@ router.get('/:email', getMyProfile);//authenticateToken
 router. put('/:email', updateMyProfile); // Nueva ruta para actualizar
 
 //rutas publicas
-router.get('/public/:userId', getPublicProfile);
+router.get('/public/:userName', getPublicProfile);
 
 export default router;

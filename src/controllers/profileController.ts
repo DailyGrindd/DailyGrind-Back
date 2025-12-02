@@ -93,11 +93,85 @@ export const getMyProfile = async (req: Request, res: Response) => {
     }   
 }
 
+// Actualizar perfil del usuario por email
+export const updateMyProfile = async (req: Request, res: Response) => {
+    try {
+        const { email } = req.params;
+        const { userName, displayName, avatarUrl, isPublic, zone } = req.body;
+
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        // Asegurar que profile no es null
+        if (!user.profile) {
+            return res.status(500).json({ error: "Error al inicializar el perfil" });
+        }
+
+        // Validar displayName único si se está cambiando
+        if (displayName !== undefined) {
+            if (typeof displayName !== 'string' || displayName.trim().length < 2) {
+                return res.status(400).json({ error: "El nombre de visualización debe tener al menos 2 caracteres" });
+            }
+            
+            const trimmedDisplayName = displayName.trim();
+            
+            // Solo validar si es diferente al actual
+            if (trimmedDisplayName !== user.profile.displayName) {
+                const existingUser = await User.findOne({ 'profile.displayName': trimmedDisplayName });
+                if (existingUser) {
+                    return res.status(400).json({ error: "El nombre de visualización ya está en uso" });
+                }
+                user.profile.displayName = trimmedDisplayName;
+            }
+        }
+
+        if (avatarUrl !== undefined) {
+            user.profile.avatarUrl = avatarUrl;
+        }
+
+        if (isPublic !== undefined) {
+            if (typeof isPublic !== 'boolean') {
+                return res.status(400). json({ error: "isPublic debe ser true o false" });
+            }
+            user.profile.isPublic = isPublic;
+        }
+
+        if (zone !== undefined) {
+            if (typeof zone !== 'string' || zone.trim().length < 2) {
+                return res.status(400).json({ error: "La zona debe tener al menos 2 caracteres" });
+            }
+            user. profile.zone = zone.trim();
+        }
+
+        await user.save();
+
+        return res.status(200).json({
+            message: "Perfil actualizado correctamente",
+            user: {
+                userName: user.userName,
+                email: user.email,
+                profile: {
+                    displayName: user.profile.displayName,
+                    avatarUrl: user.profile.avatarUrl,
+                    isPublic: user.profile.isPublic,
+                    zone: user.profile.zone
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error("Error updating profile:", error);  // Debug
+        return res.status(500).json({ error: "Error al actualizar el perfil", details: error });
+    }
+};
+
 //perfil publico de otro usuario
 export const getPublicProfile = async (req: Request, res: Response) => {
     try {
-        const userId = req.params.userId;
-        const user = await User.findById(userId).select("-password -email");
+        const userName = req.params.userName;
+        const user = await User.findOne({ userName }).select("-password -email");
         if (!user) {
             return res.status(404).json({error: "Usuario no encontrado"});
         }
@@ -124,77 +198,19 @@ export const getPublicProfile = async (req: Request, res: Response) => {
         res.status(500).json({error: error});
     }   
 }
-// Actualizar perfil del usuario por email
-export const updateMyProfile = async (req: Request, res: Response) => {
+
+export const searchPublicUsers = async (req: Request, res: Response) => {
     try {
-        const { email } = req.params;  // <-- Obtener de params, NO de (req as any).user
-        const { displayName, avatarUrl, isPublic, zone } = req.body;
-
-        console.log("Updating profile for:", email);  // Debug
-        console.log("Data received:", req.body);       // Debug
-
-        const user = await User. findOne({ email });
-        if (!user) {
-            return res. status(404).json({ error: "Usuario no encontrado" });
+        const { query } = req.query;
+        if (!query || typeof query !== 'string' || query.trim().length < 2) {
+            return res.status(400).json({ error: "El parámetro de búsqueda es inválido o demasiado corto" });
         }
-
-        // Inicializar profile si no existe
-        if (!user.profile) {
-            user.profile = {
-                displayName: user.userName,
-                avatarUrl: '',
-                isPublic: true,
-                zone: ''
-            };
-        }
-
-        // Asegurar que profile no es null
-        if (!user.profile) {
-            return res.status(500).json({ error: "Error al inicializar el perfil" });
-        }
-
-        // Actualizar campos
-        if (displayName !== undefined) {
-            if (typeof displayName !== 'string' || displayName.trim(). length < 2) {
-                return res.status(400).json({ error: "El nombre debe tener al menos 2 caracteres" });
-            }
-            user.profile. displayName = displayName. trim();
-        }
-
-        if (avatarUrl !== undefined) {
-            user.profile.avatarUrl = avatarUrl;
-        }
-
-        if (isPublic !== undefined) {
-            if (typeof isPublic !== 'boolean') {
-                return res.status(400). json({ error: "isPublic debe ser true o false" });
-            }
-            user.profile.isPublic = isPublic;
-        }
-
-        if (zone !== undefined) {
-            if (typeof zone !== 'string' || zone.trim().length < 2) {
-                return res.status(400).json({ error: "La zona debe tener al menos 2 caracteres" });
-            }
-            user. profile.zone = zone.trim();
-        }
-
-        await user.save();
-
-        //console.log("Profile updated:", user.profile);  // Debug
-
-        return res.status(200).json({
-            message: "Perfil actualizado correctamente",
-            profile: {
-                displayName: user.profile.displayName,
-                avatarUrl: user. profile.avatarUrl,
-                isPublic: user.profile.isPublic,
-                zone: user.profile.zone
-            }
-        });
-
+        const users = await User.find({
+            userName: { $regex: query.trim(), $options: 'i' },// regex = operador de Mongo - options i = case insensitive
+            'profile.isPublic': true
+        }).select("userName level profile stats profile.avatar lastActive").limit(20);
+        return res.status(200).json({ users });
     } catch (error) {
-        console.error("Error updating profile:", error);  // Debug
-        return res.status(500).json({ error: "Error al actualizar el perfil", details: error });
+        res.status(500).json({ error: "Error al buscar usuarios", details: error });
     }
-};
+}
