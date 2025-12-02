@@ -94,13 +94,31 @@ export const updateUser = async (req: Request, res: Response) => {
     }
 }
 
-// Eliminacion de usuarios parte admin
+// Dar de baja de usuarios parte admin
 export const deleteUser = async (req: Request, res: Response) => {
     try {
-        const user = await User.findOneAndDelete({ email: req.params.email });
+        const user = await User.findOne({ email: req.params.email });
         if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+
+        user.isActive = false;
+        await user.save();
         
-        res.status(200).json({ message: "Usuario eliminado correctamente" });
+        res.status(200).json({ message: "Usuario dado de baja correctamente" });
+    } catch (error) {
+        res.status(500).json({ error: error });
+    }
+}
+
+// Dar de alta de usuarios parte admin
+export const activateUser = async (req: Request, res: Response) => {
+    try {
+        const user = await User.findOne({ email: req.params.email });
+        if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+
+        user.isActive = true;
+        await user.save();
+        
+        res.status(200).json({ message: "Usuario dado de alta correctamente" });
     } catch (error) {
         res.status(500).json({ error: error });
     }
@@ -112,7 +130,11 @@ export const login = async (req: Request, res: Response) => {
         const { email, password } = req.body;
 
         const user = await User.findOne({ email });
-        if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+        if (!user) {
+            return res.status(404).json({ error: "Usuario no encontrado. Debes registrarte primero." });
+        } else if (!user.isActive) {
+            return res.status(403).json({ error: "Tu cuenta ha sido desactivada. Contacta con el administrador." });
+        }
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ error: "Contraseña incorrecta" });
@@ -349,6 +371,9 @@ export const firebaseLogin = async (req: Request, res: Response) => {
 
         if (!user) {
             return res.status(404).json({ error: "Usuario no encontrado. Debes registrarte primero." });
+        }
+        else if (!user.isActive) {
+            return res.status(403).json({ error: "Tu cuenta ha sido desactivada. Contacta con el administrador." });
         }
 
         // Generar tokens JWT propios

@@ -1,4 +1,4 @@
-import { createUser, registerUser, login, logout, userAccess, checkAvailability, firebaseRegister, firebaseLogin, getUser, getUsers, updateUser, deleteUser } from "../controllers/userController";
+import { createUser, registerUser, login, logout, userAccess, checkAvailability, firebaseRegister, firebaseLogin, getUser, getUsers, updateUser, deleteUser, activateUser } from "../controllers/userController";
 import express from "express";
 import { CreateUserDto, UpdateUserDto } from "../dto/userDto";
 import validationMiddleware from "../middlewares/middleware";
@@ -15,10 +15,9 @@ router.post("/logout", logout);
 router.post("/", verifyToken, requireRole('Administrador'), validationMiddleware(CreateUserDto), createUser);
 
 // PUT 
+router.put("/:email/activate", verifyToken, requireRole('Administrador'), activateUser);
+router.put("/:email/desactivate", verifyToken, requireRole('Administrador'), deleteUser);
 router.put("/:email", verifyToken, requireRole('Administrador'), validationMiddleware(UpdateUserDto), updateUser);
-
-// DELETE
-router.delete("/:email", verifyToken, requireRole('Administrador'), deleteUser);
 
 // GET 
 router.get("/access/user", verifyToken, userAccess);
