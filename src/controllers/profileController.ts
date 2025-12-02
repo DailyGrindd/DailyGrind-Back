@@ -97,34 +97,26 @@ export const getMyProfile = async (req: Request, res: Response) => {
 export const updateMyProfile = async (req: Request, res: Response) => {
     try {
         const { email } = req.params;
-        const { userName, displayName, avatarUrl, isPublic, zone } = req.body;
+        const { displayName, avatarUrl, isPublic, zone } = req.body;
 
         const user = await User.findOne({ email });
         if (!user) {
             return res.status(404).json({ error: "Usuario no encontrado" });
         }
 
-        // Asegurar que profile no es null
+        // Inicializar profile si no existe
         if (!user.profile) {
-            return res.status(500).json({ error: "Error al inicializar el perfil" });
+            user.profile = {
+                displayName: user.userName,
+                avatarUrl: '',
+                isPublic: true,
+                zone: ''
+            };
         }
 
-        // Validar displayName único si se está cambiando
+        // Actualizar campos (validaciones ya realizadas por el DTO)
         if (displayName !== undefined) {
-            if (typeof displayName !== 'string' || displayName.trim().length < 2) {
-                return res.status(400).json({ error: "El nombre de visualización debe tener al menos 2 caracteres" });
-            }
-            
-            const trimmedDisplayName = displayName.trim();
-            
-            // Solo validar si es diferente al actual
-            if (trimmedDisplayName !== user.profile.displayName) {
-                const existingUser = await User.findOne({ 'profile.displayName': trimmedDisplayName });
-                if (existingUser) {
-                    return res.status(400).json({ error: "El nombre de visualización ya está en uso" });
-                }
-                user.profile.displayName = trimmedDisplayName;
-            }
+            user.profile.displayName = displayName.trim();
         }
 
         if (avatarUrl !== undefined) {
@@ -132,17 +124,11 @@ export const updateMyProfile = async (req: Request, res: Response) => {
         }
 
         if (isPublic !== undefined) {
-            if (typeof isPublic !== 'boolean') {
-                return res.status(400). json({ error: "isPublic debe ser true o false" });
-            }
             user.profile.isPublic = isPublic;
         }
 
         if (zone !== undefined) {
-            if (typeof zone !== 'string' || zone.trim().length < 2) {
-                return res.status(400).json({ error: "La zona debe tener al menos 2 caracteres" });
-            }
-            user. profile.zone = zone.trim();
+            user.profile.zone = zone.trim();
         }
 
         await user.save();
@@ -162,7 +148,7 @@ export const updateMyProfile = async (req: Request, res: Response) => {
         });
 
     } catch (error) {
-        console.error("Error updating profile:", error);  // Debug
+        console.error("Error updating profile:", error);
         return res.status(500).json({ error: "Error al actualizar el perfil", details: error });
     }
 };

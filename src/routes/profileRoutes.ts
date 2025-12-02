@@ -4,13 +4,14 @@ import {
     getPublicProfile,
     updateMyProfile
 } from '../controllers/profileController';
-//import { authenticateToken } from "../middlewares/authMiddleware";
+import { verifyToken, requireRole } from "../middlewares/auth";
+import validationMiddleware from "../middlewares/middleware";
+import { UpdateProfileDto } from "../dto/userDto";
 
 const router = Router();
 // rutas protegidas
-router.get('/:email', getMyProfile);//authenticateToken
-router. put('/:email', updateMyProfile); // Nueva ruta para actualizar
-
+router.get('/:email', verifyToken, getMyProfile);
+router.put('/:email', verifyToken, validationMiddleware(UpdateProfileDto), updateMyProfile); 
 //rutas publicas
 router.get('/public/:userName', getPublicProfile);
 

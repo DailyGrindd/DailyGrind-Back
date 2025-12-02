@@ -5,10 +5,15 @@ import { NextFunction, Request, Response } from "express";
 const validationMiddleware = (dtoClass: any) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     const output = plainToInstance(dtoClass, req.body) as any;
-    output.id = req.params.id;
-
+    
+    // Para validaciones que necesitan el ID del usuario
     if ('id' in output) {
       (output as any).id = req.params.id;
+    }
+    
+    // Para validaciones que necesitan el email actual
+    if (req.params.email) {
+      output.currentEmail = req.params.email;
     }
 
     const errors = await validate(output, { forbidNonWhitelisted: true });

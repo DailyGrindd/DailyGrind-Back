@@ -102,5 +102,28 @@ export class UpdateUserDto {
     avatarUrl?: string;
 
     @IsOptional()
+    @IsString({ message: "La zona debe ser un texto" })
+    @MinLength(2, { message: "La zona debe tener al menos 2 caracteres" })
+    zone?: string;
+}
+
+export class UpdateProfileDto {
+    currentEmail?: string; // Para validación de unicidad
+
+    @IsString({ message: "El nombre de perfil debe ser un texto" })
+    @IsOptional()
+    @Validate(isDisplayNameUniqueUpdate)
+    displayName?: string;
+
+    @IsOptional()
+    avatarUrl?: string;
+
+    @IsOptional()
+    @IsBoolean({ message: "isPublic debe ser verdadero o falso" })
+    isPublic?: boolean;
+
+    @IsOptional()
+    @IsString({ message: "La zona debe ser un texto" })
+    @MinLength(2, { message: "La zona debe tener al menos 2 caracteres" })
     zone?: string;
 }
