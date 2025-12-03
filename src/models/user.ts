@@ -22,6 +22,10 @@ const userSchema = new mongoose.Schema({
         type: Number,
         default: 1
     },
+    isActive: {
+        type: Boolean,
+        default: true
+    },
     profile: {
         displayName: {
             type: String,

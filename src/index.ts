@@ -5,7 +5,9 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import userRoutes from "./routes/userRoutes"
 import challengeRoutes from "./routes/challengeRoutes"
+import dailyQuestRoutes from "./routes/dailyQuestRoutes"
 import cookieParser from "cookie-parser";
+import profileRoutes from "./routes/profileRoutes";
 
 dotenv.config();
 const app = express();
@@ -21,6 +23,8 @@ app.use(cookieParser());
 
 app.use('/api/users', userRoutes);
 app.use('/api/challenges', challengeRoutes);
+app.use('/api/daily-quests', dailyQuestRoutes);
+app.use("/api/profile", profileRoutes);
 
 app.listen(port, () => {
     console.log(`APP escuchando on port ${port}`)
