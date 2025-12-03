@@ -184,7 +184,7 @@ export const getPublicProfile = async (req: Request, res: Response) => {
         res.status(500).json({error: error});
     }   
 }
-
+// solo publicos y no admins
 export const searchPublicUsers = async (req: Request, res: Response) => {
     try {
         const { query } = req.query;
@@ -192,9 +192,10 @@ export const searchPublicUsers = async (req: Request, res: Response) => {
             return res.status(400).json({ error: "El parámetro de búsqueda es inválido o demasiado corto" });
         }
         const users = await User.find({
-            userName: { $regex: query.trim(), $options: 'i' },// regex = operador de Mongo - options i = case insensitive
-            'profile.isPublic': true
-        }).select("userName level profile stats profile.avatar lastActive").limit(20);
+            'profile.displayName': { $regex: query.trim(), $options: 'i' },// regex = operador de Mongo - options i = case insensitive
+            'profile.isPublic': true,
+            'role': { $ne: 'Administrador' }
+        }).select("userName level profile stats lastActive").limit(20);
         return res.status(200).json({ users });
     } catch (error) {
         res.status(500).json({ error: "Error al buscar usuarios", details: error });
