@@ -6,6 +6,7 @@ import Badge from '../models/badge';
 import mongoose from 'mongoose';
 import challenge from '../models/challenge';
 import badge from '../models/badge';
+import UserChallenge from '../models/challenge';
 
 export const getMyProfile = async (req: Request, res: Response) => {
     try {
@@ -166,6 +167,27 @@ export const getPublicProfile = async (req: Request, res: Response) => {
         }
         const userBadges = await UserBadge.find({userId: user._id}).populate('badgeId');
         
+        // Calcular actividad de los últimos 30 días
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const recentQuests = await DailyQuest.find({
+            userId: user._id,
+            date: { $gte: thirtyDaysAgo }
+        }).populate("missions.challengeId");
+
+        const completedChallenges = recentQuests.flatMap(quest => 
+            quest.missions.filter(m => m.status === "completed")
+        );
+        
+        const recentActivity = {
+            last30Days: {
+                totalCompleted: completedChallenges.length,
+                globalCompleted: completedChallenges.filter(m => m.type === "global").length,
+                personalCompleted: completedChallenges.filter(m => m.type === "personal").length,
+                totalPointsEarned: completedChallenges.reduce((sum, m) => sum + (m.pointsAwarded || 0), 0)
+            }
+        };
         return res.status(200).json({
             user: {
             id: user._id,
@@ -178,7 +200,8 @@ export const getPublicProfile = async (req: Request, res: Response) => {
             badges: userBadges.map(ub => ({
             badge: ub.badgeId,
             earnedAt: ub.earnedAt   
-            }))
+            })),
+            recentActivity
         });
     }   catch (error) {
         res.status(500).json({error: error});
