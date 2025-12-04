@@ -431,3 +431,64 @@ export const firebaseLogin = async (req: Request, res: Response) => {
         });
     }
 };
+
+// Obtener cuantos usuarios por cada provincia existen
+export const getUserCountZone = async (req: Request, res: Response) => {
+    try {
+        const provinces = [
+            "Buenos Aires", "Catamarca", "Chaco", "Chubut", "Córdoba", 
+            "Corrientes", "Entre Ríos", "Formosa", "Jujuy", "La Pampa", 
+            "La Rioja", "Mendoza", "Misiones", "Neuquén", "Río Negro", 
+            "Salta", "San Juan", "San Luis", "Santa Cruz", "Santa Fe", 
+            "Santiago del Estero", "Tierra del Fuego", "Tucumán"
+        ];
+
+        // Contar usuarios por provincia
+        const userCountByZone = await User.aggregate([
+            {
+                $match: {
+                    "profile.zone": { $exists: true, $ne: null }
+                }
+            },
+            {
+                $group: {
+                    _id: "$profile.zone",
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                $sort: { count: -1 }
+            }
+        ]);
+
+        const zoneMap = new Map<string, number>();
+        provinces.forEach(province => {
+            zoneMap.set(province, 0);
+        });
+
+        // Actualizar con los datos reales
+        userCountByZone.forEach(item => {
+            if (zoneMap.has(item._id)) {
+                zoneMap.set(item._id, item.count);
+            }
+        });
+
+        // Convertir a array de objetos
+        const result = Array.from(zoneMap.entries()).map(([zone, count]) => ({
+            zone,
+            count
+        }));
+
+        res.status(200).json({
+            totalProvinces: provinces.length,
+            data: result
+        });
+
+    } catch (error) {
+        console.error("Error al obtener conteo por zona:", error);
+        res.status(500).json({ 
+            error: "Error al obtener conteo por zona",
+            details: error 
+        });
+    }
+}

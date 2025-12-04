@@ -418,3 +418,48 @@ export const getChallengeStats = async (req: Request, res: Response) => {
         });
     }
 };
+
+// Obtener estadísticas por categoría de desafíos
+export const getChallengeTypeComplete = async (req: Request, res: Response) => {
+    try {
+        // Obtener estadísticas por categoría de desafío
+        const statsByCategory = await Challenge.aggregate([
+            {
+                $group: {
+                    _id: "$category",
+                    totalAssigned: { $sum: "$stats.timesAssigned" },
+                    totalCompleted: { $sum: "$stats.timesCompleted" },
+                    totalChallenges: { $sum: 1 }
+                }
+            },
+            {
+                $project: {
+                    category: "$_id",
+                    totalAssigned: 1,
+                    totalCompleted: 1,
+                    totalChallenges: 1,
+                    _id: 0
+                }
+            },
+            {
+                $sort: { totalCompleted: -1 }
+            }
+        ]);
+
+        res.status(200).json({
+            data: statsByCategory.map(stat => ({
+                category: stat.category,
+                totalChallenges: stat.totalChallenges,
+                totalAssigned: stat.totalAssigned,
+                totalCompleted: stat.totalCompleted
+            }))
+        });
+
+    } catch (error: any) {
+        console.error("Error al obtener estadísticas por categoría:", error);
+        res.status(500).json({ 
+            error: "Error al obtener estadísticas por categoría",
+            details: error.message 
+        });
+    }
+}

@@ -621,3 +621,139 @@ export const getMyHistory = async (req: Request, res: Response) => {
         });
     }
 };
+
+// Cantidad promedio de missions skippeadas, pendientes y completadas (ultimos 15 dias)
+export const getAverageStatus = async (req: Request, res: Response) => {
+    try {
+        // Obtener todas las dailyQuests de los últimos 15 días
+        const fifteenDaysAgo = new Date();
+        fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+        fifteenDaysAgo.setHours(0, 0, 0, 0);
+
+        const dailyQuests = await DailyQuest.find({
+            date: { $gte: fifteenDaysAgo }
+        });
+
+        if (dailyQuests.length === 0) {
+            return res.status(200).json({
+                message: "No hay datos de los últimos 15 días",
+                totalSkipped: 0,
+                totalPending: 0,
+                totalCompleted: 0,
+                averageSkipped: "0%",
+                averagePending: "0%",
+                averageCompleted: "0%",
+                period: "Últimos 15 días"
+            });
+        }
+
+        let totalSkipped = 0;
+        let totalPending = 0;
+        let totalCompleted = 0;
+        let totalMissions = 0;
+
+        dailyQuests.forEach(quest => {
+            quest.missions.forEach(mission => {
+                totalMissions += 1;
+                if (mission.status === "skipped") {
+                    totalSkipped += 1;
+                } else if (mission.status === "pending") {
+                    totalPending += 1;
+                } else if (mission.status === "completed") {
+                    totalCompleted += 1;
+                }
+            });
+        });
+
+        // Calcular promedios en porcentaje
+        const averageSkipped = totalMissions > 0 ? ((totalSkipped / totalMissions) * 100).toFixed(1) : "0";
+        const averagePending = totalMissions > 0 ? ((totalPending / totalMissions) * 100).toFixed(1) : "0";
+        const averageCompleted = totalMissions > 0 ? ((totalCompleted / totalMissions) * 100).toFixed(1) : "0";
+
+        res.status(200).json({
+            totalSkipped,
+            totalPending,
+            totalCompleted,
+            averageSkipped: `${averageSkipped}%`,
+            averagePending: `${averagePending}%`,
+            averageCompleted: `${averageCompleted}%`,
+            period: "Últimos 15 días"
+        });
+
+    } catch (error: any) {
+        console.error("Error al obtener promedios de skip, pending, completed:", error);
+        res.status(500).json({ 
+            error: "Error al obtener promedios de skip, pending, completed",
+            details: error.message 
+        });
+    }
+};
+
+// Cantidad de missions personal y cantidad de missions global y % de completadas
+export const getMissionTypeStats = async (req: Request, res: Response) => {
+    try {
+        const totalMissionsGlobal = await DailyQuest.aggregate([
+            { $unwind: "$missions" },
+            { $match: { "missions.type": "global" } },
+            { $group: { _id: null, count: { $sum: 1 } } }
+        ]);
+
+        const totalMissionsPersonal = await DailyQuest.aggregate([
+            { $unwind: "$missions" },
+            { $match: { "missions.type": "personal" } },
+            { $group: { _id: null, count: { $sum: 1 } } }
+        ]);
+
+        const completedMissionsGlobal = await DailyQuest.aggregate([
+            { $unwind: "$missions" },
+            { $match: { 
+                "missions.type": "global",
+                "missions.status": "completed"
+            }},
+            { $group: { _id: null, count: { $sum: 1 } } }
+        ]);
+
+        const completedMissionsPersonal = await DailyQuest.aggregate([
+            { $unwind: "$missions" },
+            { $match: { 
+                "missions.type": "personal",
+                "missions.status": "completed"
+            }},
+            { $group: { _id: null, count: { $sum: 1 } } }
+        ]);
+
+        const totalGlobal = totalMissionsGlobal[0]?.count || 0;
+        const totalPersonal = totalMissionsPersonal[0]?.count || 0;
+        const completedGlobal = completedMissionsGlobal[0]?.count || 0;
+        const completedPersonal = completedMissionsPersonal[0]?.count || 0;
+
+        // Calcular porcentajes
+        const percentageGlobalCompleted = totalGlobal > 0 
+            ? ((completedGlobal / totalGlobal) * 100).toFixed(1) 
+            : 0;
+
+        const percentagePersonalCompleted = totalPersonal > 0 
+            ? ((completedPersonal / totalPersonal) * 100).toFixed(1) 
+            : 0;
+
+        res.status(200).json({
+            global: {
+                total: totalGlobal,
+                completed: completedGlobal,
+                percentageCompleted: `${percentageGlobalCompleted}%`
+            },
+            personal: {
+                total: totalPersonal,
+                completed: completedPersonal,
+                percentageCompleted: `${percentagePersonalCompleted}%`
+            }
+        });
+
+    } catch (error: any) {
+        console.error("Error al obtener estadísticas de misiones:", error);
+        res.status(500).json({ 
+            error: "Error al obtener estadísticas de misiones",
+            details: error.message 
+        });
+    }
+};

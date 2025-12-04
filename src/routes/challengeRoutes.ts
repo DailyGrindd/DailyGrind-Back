@@ -10,7 +10,8 @@ import {
     getRandomChallenges,
     incrementAssigned,
     completeChallenge,
-    getChallengeStats
+    getChallengeStats,
+    getChallengeTypeComplete
 } from "../controllers/challengeController";
 import { CreateChallengeDto, UpdateChallengeDto } from "../dto/challengeDto";
 import validationMiddleware from "../middlewares/middleware";
@@ -19,6 +20,7 @@ import { verifyToken, requireRole } from "../middlewares/auth";
 const router = express.Router();
 
 // Rutas públicas
+router.get("/stats-admin", verifyToken, requireRole("Administrador"), getChallengeTypeComplete);
 router.get("/", getAllChallenges);
 router.get("/stats", getChallengeStats);
 router.get("/random", getRandomChallenges);
