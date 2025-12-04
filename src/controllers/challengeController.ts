@@ -14,7 +14,7 @@ export const getAllChallenges = async (req: Request, res: Response) => {
         if (isActive !== undefined) filter.isActive = isActive === 'true';
 
         const challenges = await Challenge.find(filter)
-            .populate('ownerUser', 'userName profile.displayName')
+            .populate('ownerUser', 'userName profile.displayName profile.isPublic')
             .sort({ createdAt: -1 });
 
         res.status(200).json(challenges);
@@ -33,7 +33,7 @@ export const getChallengeById = async (req: Request, res: Response) => {
         const { id } = req.params;
 
         const challenge = await Challenge.findById(id)
-            .populate('ownerUser', 'userName profile.displayName')
+            .populate('ownerUser', 'userName profile.displayName profile.isPublic')
             .populate('requirements.preRequisiteChallenge', 'title');
 
         if (!challenge) {
@@ -273,7 +273,7 @@ export const getChallengesByCategory = async (req: Request, res: Response) => {
         const { category } = req.params;
 
         const challenges = await Challenge.find({ category, isActive: true })
-            .populate('ownerUser', 'userName profile.displayName')
+            .populate('ownerUser', 'userName profile.displayName profile.isPublic')
             .sort({ difficulty: 1, points: -1 });
 
         res.status(200).json(challenges);
