@@ -3,6 +3,7 @@ import User from "../models/user";
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { auth } from "../config/firebase";
+import { calculateUserLevelInfo, updateUserLevelIfNeeded } from "../utils/levelSystem";
 
 // Obtener todos los usuarios o filtrados por role
 export const getUsers = async (req: Request, res: Response) => {
@@ -492,3 +493,177 @@ export const getUserCountZone = async (req: Request, res: Response) => {
         });
     }
 }
+
+// Obtener información completa del nivel y experiencia del usuario autenticado
+export const getMyLevelInfo = async (req: Request, res: Response) => {
+    try {
+        const userEmail = req.user?.email;
+
+        const user = await User.findOne({ email: userEmail });
+        if (!user) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        // Actualizar nivel si es necesario antes de devolver la información
+        const hasLeveledUp = await updateUserLevelIfNeeded(user);
+        
+        // Calcular información completa del nivel
+        const levelInfo = calculateUserLevelInfo(user.level, user.stats?.totalPoints || 0);
+
+        const response: any = {
+            levelInfo: {
+                currentLevel: levelInfo.currentLevel,
+                totalPoints: levelInfo.totalPoints,
+                currentLevelPoints: levelInfo.currentLevelPoints,
+                pointsToNextLevel: levelInfo.pointsToNextLevel,
+                pointsRequiredForNextLevel: levelInfo.pointsRequiredForNextLevel,
+                progressPercent: levelInfo.progressPercent
+            },
+            stats: user.stats
+        };
+
+        // Si acabó de subir de nivel al hacer la consulta
+        if (hasLeveledUp) {
+            response.levelUp = {
+                message: `¡Has subido al nivel ${levelInfo.currentLevel}!`,
+                newLevel: levelInfo.currentLevel
+            };
+        }
+
+        res.status(200).json(response);
+
+    } catch (error: any) {
+        console.error("Error al obtener información de nivel:", error);
+        res.status(500).json({ 
+            error: "Error al obtener información de nivel",
+            details: error.message 
+        });
+    }
+};
+
+// Obtener ranking de usuarios por nivel (calculado dinámicamente desde puntos)
+export const getLevelRanking = async (req: Request, res: Response) => {
+    try {
+        const { limit = 10, zone } = req.query;
+
+        // Construir filtro
+        const filter: any = {};
+        if (zone) {
+            filter['profile.zone'] = zone;
+        }
+
+        const users = await User.find(filter)
+            .select('userName level profile.displayName profile.zone stats.totalPoints stats.totalCompleted')
+            .sort({ 
+                'stats.totalPoints': -1, // Ordenar por puntos totales
+                level: -1 
+            })
+            .limit(Number(limit));
+
+        // Calcular nivel real para cada usuario y formatear
+        const ranking = users.map((user, index) => {
+            const levelInfo = calculateUserLevelInfo(user.level, user.stats?.totalPoints || 0);
+            
+            return {
+                position: index + 1,
+                userName: user.userName,
+                displayName: user.profile?.displayName,
+                zone: user.profile?.zone,
+                storedLevel: user.level, // Nivel almacenado en BD
+                effectiveLevel: levelInfo.currentLevel, // Nivel efectivo (considerando puntos)
+                calculatedFromPoints: levelInfo.calculatedLevel, // Nivel puro basado en puntos
+                totalPoints: levelInfo.totalPoints,
+                totalCompleted: user.stats?.totalCompleted || 0,
+                progressPercent: levelInfo.progressPercent,
+                canLevelUp: levelInfo.isLevelUp // Si puede subir de nivel
+            };
+        });
+
+        res.status(200).json({
+            ranking,
+            filter: zone ? { zone } : null
+        });
+
+    } catch (error: any) {
+        console.error("Error al obtener ranking de niveles:", error);
+        res.status(500).json({ 
+            error: "Error al obtener ranking de niveles",
+            details: error.message 
+        });
+    }
+};
+
+// Estadísticas generales de niveles en la plataforma
+export const getLevelStats = async (req: Request, res: Response) => {
+    try {
+        const users = await User.find()
+            .select('level stats.totalPoints');
+
+        // Calcular estadísticas basadas en niveles calculados dinámicamente
+        const levelDistribution = new Map<number, number>();
+        let totalCalculatedLevels = 0;
+        let maxCalculatedLevel = 1;
+        let totalPoints = 0;
+
+        users.forEach(user => {
+            const levelInfo = calculateUserLevelInfo(user.level, user.stats?.totalPoints || 0);
+            const effectiveLevel = levelInfo.currentLevel; // Usar nivel efectivo
+            
+            levelDistribution.set(effectiveLevel, (levelDistribution.get(effectiveLevel) || 0) + 1);
+            totalCalculatedLevels += effectiveLevel;
+            maxCalculatedLevel = Math.max(maxCalculatedLevel, effectiveLevel);
+            totalPoints += levelInfo.totalPoints;
+        });
+
+        // Convertir a array ordenado
+        const distributionArray = Array.from(levelDistribution.entries())
+            .sort(([a], [b]) => a - b)
+            .map(([level, count]) => ({ level, userCount: count }));
+
+        res.status(200).json({
+            levelDistribution: distributionArray,
+            general: {
+                totalUsers: users.length,
+                avgLevel: users.length > 0 ? parseFloat((totalCalculatedLevels / users.length).toFixed(2)) : 0,
+                maxLevel: maxCalculatedLevel,
+                totalPoints: totalPoints,
+                avgPoints: users.length > 0 ? Math.floor(totalPoints / users.length) : 0
+            }
+        });
+
+    } catch (error: any) {
+        console.error("Error al obtener estadísticas de niveles:", error);
+        res.status(500).json({ 
+            error: "Error al obtener estadísticas de niveles",
+            details: error.message 
+        });
+    }
+};
+
+// Función para sincronizar todos los niveles de usuarios con sus puntos (solo administradores)
+export const syncAllUserLevels = async (req: Request, res: Response) => {
+    try {
+        const users = await User.find();
+        let updatedCount = 0;
+
+        for (const user of users) {
+            const hasLeveledUp = await updateUserLevelIfNeeded(user);
+            if (hasLeveledUp) {
+                updatedCount++;
+            }
+        }
+
+        res.status(200).json({
+            message: `Sincronización completada. ${updatedCount} usuarios actualizaron su nivel.`,
+            totalUsers: users.length,
+            updatedUsers: updatedCount
+        });
+
+    } catch (error: any) {
+        console.error("Error al sincronizar niveles:", error);
+        res.status(500).json({ 
+            error: "Error al sincronizar niveles de usuarios",
+            details: error.message 
+        });
+    }
+};

@@ -349,7 +349,7 @@ export const completeChallenge = async (req: Request, res: Response) => {
             return res.status(404).json({ error: "Desafío no encontrado" });
         }
 
-        // Verificar que stats existe
+        // Verificar que stats existe e inicializar si es necesario
         if (!challenge.stats) {
             challenge.stats = {
                 timesAssigned: 0,
@@ -361,10 +361,13 @@ export const completeChallenge = async (req: Request, res: Response) => {
         // Incrementar completados
         challenge.stats.timesCompleted += 1;
 
-        // Calcular tasa de completación
+        // Calcular tasa de completación (evitar división por cero)
         if (challenge.stats.timesAssigned > 0) {
             challenge.stats.completionRate = 
-                (challenge.stats.timesCompleted / challenge.stats.timesAssigned) * 100;
+                Math.round((challenge.stats.timesCompleted / challenge.stats.timesAssigned) * 100 * 100) / 100; // Redondear a 2 decimales
+        } else {
+            // Si no hay asignaciones registradas, pero sí completaciones, asumir 100%
+            challenge.stats.completionRate = 100;
         }
 
         await challenge.save();

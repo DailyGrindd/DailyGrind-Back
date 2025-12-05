@@ -1,4 +1,4 @@
-import { createUser, registerUser, login, logout, userAccess, checkAvailability, firebaseRegister, firebaseLogin, getUser, getUsers, updateUser, deleteUser, activateUser, getUserCountZone } from "../controllers/userController";
+import { createUser, registerUser, login, logout, userAccess, checkAvailability, firebaseRegister, firebaseLogin, getUser, getUsers, updateUser, deleteUser, activateUser, getUserCountZone, getMyLevelInfo, getLevelRanking, getLevelStats, syncAllUserLevels } from "../controllers/userController";
 import express from "express";
 import { CreateUserDto, UpdateUserDto } from "../dto/userDto";
 import validationMiddleware from "../middlewares/middleware";
@@ -7,6 +7,7 @@ import { verifyToken, requireRole } from "../middlewares/auth";
 const router = express.Router();
 
 // POST - Rutas específicas PRIMERO
+router.post("/sync-levels", verifyToken, requireRole('Administrador'), syncAllUserLevels);
 router.post("/firebase-register", firebaseRegister);
 router.post("/firebase-login", firebaseLogin);
 router.post("/register", validationMiddleware(CreateUserDto), registerUser);
@@ -20,6 +21,9 @@ router.put("/:email/desactivate", verifyToken, requireRole('Administrador'), del
 router.put("/:email", verifyToken, requireRole('Administrador'), validationMiddleware(UpdateUserDto), updateUser);
 
 // GET 
+router.get("/level/info", verifyToken, getMyLevelInfo);
+router.get("/level/ranking", getLevelRanking);
+router.get("/level/stats", verifyToken, requireRole('Administrador'), getLevelStats);
 router.get("/access/user", verifyToken, userAccess);
 router.get("/check-availability", checkAvailability);
 router.get("/zone-stats", verifyToken, requireRole('Administrador'), getUserCountZone);

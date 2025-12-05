@@ -9,7 +9,8 @@ import {
     skipMission,
     getMyHistory,
     getAverageStatus,
-    getMissionTypeStats
+    getMissionTypeStats,
+    checkAndUpdateLevel
 } from "../controllers/dailyQuestController";
 import { AssignChallengeDto } from "../dto/dailyQuestDto";
 import validationMiddleware from "../middlewares/middleware";
@@ -22,6 +23,9 @@ router.get("/initialize", verifyToken, initializeDailyQuest);
 
 // Obtener mis misiones de hoy
 router.get("/my-daily", verifyToken, getMyDailyQuest);
+
+// Verificar y actualizar nivel del usuario
+router.get("/check-level", verifyToken, checkAndUpdateLevel);
 
 // Obtener historial (últimos 30 días por defecto)
 router.get("/history", verifyToken, getMyHistory);

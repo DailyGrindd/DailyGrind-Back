@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import DailyQuest from "../models/dailyQuest";
 import Challenge from "../models/challenge";
 import User from "../models/user";
+import { calculateUserLevelInfo, updateUserLevelIfNeeded, calculateBonusPointsFromChallenge } from "../utils/levelSystem";
 
 // Generar/Obtener el DailyQuest de hoy (auto-genera misiones globales si no existen)
 export const initializeDailyQuest = async (req: Request, res: Response) => {
@@ -466,20 +467,58 @@ export const completeMission = async (req: Request, res: Response) => {
             return res.status(404).json({ error: "Desafío no encontrado" });
         }
 
+        // Calcular puntos totales incluyendo bonus por dificultad
+        const basePoints = challenge.points;
+        const bonusPoints = calculateBonusPointsFromChallenge(basePoints, challenge.difficulty);
+        const totalPointsEarned = basePoints + bonusPoints;
+
         // Marcar como completada y asignar puntos
         mission.status = "completed";
         mission.completedAt = new Date();
-        mission.pointsAwarded = challenge.points;
+        mission.pointsAwarded = totalPointsEarned;
 
         await dailyQuest.save();
 
+        // Calcular información de nivel antes de actualizar
+        const levelInfoBefore = calculateUserLevelInfo(user.level, user.stats?.totalPoints || 0);
+
         // Actualizar estadísticas del usuario
         user.stats = user.stats || { totalPoints: 0, weeklyPoints: 0, totalCompleted: 0, currentStreak: 0 };
-        user.stats.totalPoints += challenge.points;
-        user.stats.weeklyPoints += challenge.points;
+        user.stats.totalPoints += totalPointsEarned;
+        user.stats.weeklyPoints += totalPointsEarned;
         user.stats.totalCompleted += 1;
+        
+        // Actualizar streak (verificar si completó algo ayer para mantener streak)
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(0, 0, 0, 0);
+        const dayBeforeYesterday = new Date(yesterday);
+        dayBeforeYesterday.setDate(yesterday.getDate() - 1);
+        
+        const yesterdayQuest = await DailyQuest.findOne({
+            userId: user._id,
+            date: { $gte: yesterday, $lt: today }
+        });
+        
+        const hasCompletedYesterday = yesterdayQuest && yesterdayQuest.missions.some(m => m.status === "completed");
+        
+        if (hasCompletedYesterday || user.stats.currentStreak === 0) {
+            user.stats.currentStreak += 1;
+        } else {
+            user.stats.currentStreak = 1; // Reiniciar streak si no completó ayer
+        }
+        
         user.lastActive = new Date();
-        await user.save();
+        
+        // Calcular información de nivel después de actualizar puntos
+        const levelInfoAfter = calculateUserLevelInfo(user.level, user.stats.totalPoints);
+        
+        // Verificar si hay subida de nivel
+        const hasLeveledUp = await updateUserLevelIfNeeded(user);
+        
+        if (!hasLeveledUp) {
+            await user.save();
+        }
 
         // Actualizar estadísticas del desafío
         if (challenge.stats) {
@@ -493,12 +532,36 @@ export const completeMission = async (req: Request, res: Response) => {
 
         await dailyQuest.populate('missions.challengeId');
 
-        res.status(200).json({
+        // Preparar respuesta con información de nivel y experiencia
+        const finalLevelInfo = calculateUserLevelInfo(user.level, user.stats.totalPoints);
+        
+        const responseData: any = {
             message: "¡Misión completada!",
-            pointsEarned: challenge.points,
+            pointsEarned: basePoints,
+            bonusPoints: bonusPoints,
+            totalPointsAwarded: totalPointsEarned,
             dailyQuest,
-            userStats: user.stats
-        });
+            userStats: user.stats,
+            levelInfo: {
+                currentLevel: finalLevelInfo.currentLevel,
+                totalPoints: finalLevelInfo.totalPoints,
+                currentLevelPoints: finalLevelInfo.currentLevelPoints,
+                pointsToNextLevel: finalLevelInfo.pointsToNextLevel,
+                progressPercent: finalLevelInfo.progressPercent
+            }
+        };
+
+        // Si hubo subida de nivel, incluir información especial
+        if (hasLeveledUp) {
+            responseData.levelUp = {
+                message: `¡Felicitaciones! Has subido al nivel ${finalLevelInfo.currentLevel}!`,
+                previousLevel: levelInfoBefore.currentLevel,
+                newLevel: finalLevelInfo.currentLevel,
+                pointsUsed: finalLevelInfo.totalPoints
+            };
+        }
+
+        res.status(200).json(responseData);
 
     } catch (error: any) {
         console.error("Error al completar misión:", error);
@@ -753,6 +816,57 @@ export const getMissionTypeStats = async (req: Request, res: Response) => {
         console.error("Error al obtener estadísticas de misiones:", error);
         res.status(500).json({ 
             error: "Error al obtener estadísticas de misiones",
+            details: error.message 
+        });
+    }
+};
+
+// Verificar y actualizar nivel del usuario basado en puntos totales
+export const checkAndUpdateLevel = async (req: Request, res: Response) => {
+    try {
+        const userEmail = req.user?.email;
+
+        const user = await User.findOne({ email: userEmail });
+        if (!user) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        // Calcular información de nivel antes de la actualización
+        const levelInfoBefore = calculateUserLevelInfo(user.level, user.stats?.totalPoints || 0);
+        
+        // Verificar si necesita actualizar nivel
+        const hasLeveledUp = await updateUserLevelIfNeeded(user);
+        
+        // Calcular información después de la actualización
+        const levelInfoAfter = calculateUserLevelInfo(user.level, user.stats?.totalPoints || 0);
+
+        const response: any = {
+            message: hasLeveledUp ? "¡Nivel actualizado!" : "Tu nivel está actualizado",
+            levelInfo: {
+                currentLevel: levelInfoAfter.currentLevel,
+                totalPoints: levelInfoAfter.totalPoints,
+                currentLevelPoints: levelInfoAfter.currentLevelPoints,
+                pointsToNextLevel: levelInfoAfter.pointsToNextLevel,
+                progressPercent: levelInfoAfter.progressPercent
+            },
+            userStats: user.stats
+        };
+
+        if (hasLeveledUp) {
+            response.levelUp = {
+                message: `¡Felicitaciones! Has subido del nivel ${levelInfoBefore.currentLevel} al nivel ${levelInfoAfter.currentLevel}!`,
+                previousLevel: levelInfoBefore.currentLevel,
+                newLevel: levelInfoAfter.currentLevel,
+                pointsUsed: levelInfoAfter.totalPoints
+            };
+        }
+
+        res.status(200).json(response);
+
+    } catch (error: any) {
+        console.error("Error al verificar nivel del usuario:", error);
+        res.status(500).json({ 
+            error: "Error al verificar nivel del usuario",
             details: error.message 
         });
     }
