@@ -176,7 +176,8 @@ export const login = async (req: Request, res: Response) => {
                 level: user.level, 
                 displayName: user.profile?.displayName, 
                 totalPoints: user.stats?.totalPoints, 
-                avatarUrl: user.profile?.avatarUrl 
+                avatarUrl: user.profile?.avatarUrl ,
+                zone: user.profile?.zone
             } 
         });
     }
@@ -420,7 +421,8 @@ export const firebaseLogin = async (req: Request, res: Response) => {
                 level: user.level,
                 displayName: user.profile?.displayName,
                 totalPoints: user.stats?.totalPoints,
-                avatarUrl: user.profile?.avatarUrl
+                avatarUrl: user.profile?.avatarUrl,
+                zone: user.profile?.zone
             }
         });
 
