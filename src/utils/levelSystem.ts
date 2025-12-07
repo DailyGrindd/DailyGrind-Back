@@ -150,7 +150,6 @@ export const updateUserLevelIfNeeded = async (user: any): Promise<boolean> => {
         user.level = levelInfo.currentLevel;
         await user.save();
         
-        console.log(`Usuario ${user.email} subió del nivel ${previousLevel} al nivel ${levelInfo.currentLevel}`);
         return true;
     }
     

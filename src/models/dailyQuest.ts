@@ -46,6 +46,10 @@ const dailyQuestSchema = new mongoose.Schema(
         rerollCount: {
             type: Number,
             default: 0
+        },
+        pendingChainPoints: {
+            type: Number,
+            default: 0
         }
     }
 );
