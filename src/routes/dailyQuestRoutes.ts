@@ -7,11 +7,14 @@ import {
     rerollGlobalMission,
     completeMission,
     skipMission,
-    getMyHistory
+    getMyHistory,
+    getAverageStatus,
+    getMissionTypeStats,
+    checkAndUpdateLevel
 } from "../controllers/dailyQuestController";
 import { AssignChallengeDto } from "../dto/dailyQuestDto";
 import validationMiddleware from "../middlewares/middleware";
-import { verifyToken } from "../middlewares/auth";
+import { requireRole, verifyToken } from "../middlewares/auth";
 
 const router = express.Router();
 
@@ -21,8 +24,17 @@ router.get("/initialize", verifyToken, initializeDailyQuest);
 // Obtener mis misiones de hoy
 router.get("/my-daily", verifyToken, getMyDailyQuest);
 
+// Verificar y actualizar nivel del usuario
+router.get("/check-level", verifyToken, checkAndUpdateLevel);
+
 // Obtener historial (últimos 30 días por defecto)
 router.get("/history", verifyToken, getMyHistory);
+
+// Obtener cantidad promedio de missions skippeadas, pendientes y completadas (ultimos 15 dias)
+router.get("/mission-state", verifyToken, requireRole('Administrador'), getAverageStatus);
+
+// Obtener estadísticas de misiones por tipo (global y personal)
+router.get("/mission-typestats", verifyToken, requireRole('Administrador'), getMissionTypeStats);
 
 // Asignar desafío PERSONAL manualmente (slots 4 y 5)
 router.post("/assign-personal", verifyToken, validationMiddleware(AssignChallengeDto), assignPersonalChallenge);

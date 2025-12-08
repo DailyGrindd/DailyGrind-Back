@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import DailyQuest from "../models/dailyQuest";
 import Challenge from "../models/challenge";
 import User from "../models/user";
+import { calculateUserLevelInfo, updateUserLevelIfNeeded, calculateBonusPointsFromChallenge } from "../utils/levelSystem";
 
 // Generar/Obtener el DailyQuest de hoy (auto-genera misiones globales si no existen)
 export const initializeDailyQuest = async (req: Request, res: Response) => {
@@ -29,26 +30,46 @@ export const initializeDailyQuest = async (req: Request, res: Response) => {
         }
 
         // Generar desafíos globales aleatorios (hasta 3, o los que haya disponibles)
+        // Solo asignar desafíos sin prerequisitos (los que tienen prerequisito se desbloquean al completar)
         const globalChallenges = await Challenge.aggregate([
             { 
                 $match: { 
                     type: "global",
                     isActive: true,
-                    'rules.minUserLevel': { $lte: user.level }
+                    'rules.minUserLevel': { $lte: user.level },
+                    $or: [
+                        { 'requirements.preRequisiteChallenge': { $exists: false } },
+                        { 'requirements.preRequisiteChallenge': null }
+                    ]
                 } 
             },
             { $sample: { size: 3 } }
         ]);
 
-        // Crear misiones solo con los desafíos disponibles (puede ser 0, 1, 2 o 3)
-        const missions = globalChallenges.map((challenge, index) => ({
-            slot: index + 1, // Slots 1, 2, 3
-            challengeId: challenge._id,
-            type: "global" as "global",
-            status: "pending" as "pending",
-            completedAt: null,
-            pointsAwarded: 0
-        }));
+        // Crear exactamente 3 slots (1, 2, 3) aunque no haya suficientes desafíos
+        const missions: any[] = [];
+
+        for (let slot = 1; slot <= 3; slot++) {
+            const challenge = globalChallenges[slot - 1]; // undefined si no hay suficientes
+            
+            if (challenge) {
+                missions.push({
+                    slot,
+                    challengeId: challenge._id,
+                    type: "global" as "global",
+                    status: "pending" as "pending",
+                    completedAt: null,
+                    pointsAwarded: 0
+                });
+                
+                // Incrementar estadística del desafío
+                await Challenge.findByIdAndUpdate(
+                    challenge._id,
+                    { $inc: { 'stats.timesAssigned': 1 } }
+                );
+            }
+            // Si no hay challenge, el slot queda vacío (no agregamos nada al array)
+        }
 
         dailyQuest = await DailyQuest.create({
             userId: user._id,
@@ -56,14 +77,6 @@ export const initializeDailyQuest = async (req: Request, res: Response) => {
             missions,
             rerollCount: 0
         });
-
-        // Incrementar estadísticas de los desafíos asignados
-        for (const challenge of globalChallenges) {
-            await Challenge.findByIdAndUpdate(
-                challenge._id,
-                { $inc: { 'stats.timesAssigned': 1 } }
-            );
-        }
 
         await dailyQuest.populate('missions.challengeId');
 
@@ -73,7 +86,6 @@ export const initializeDailyQuest = async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        console.error("Error al inicializar DailyQuest:", error);
         res.status(500).json({ 
             error: "Error al inicializar DailyQuest",
             details: error.message 
@@ -196,7 +208,6 @@ export const assignPersonalChallenge = async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        console.error("Error al asignar desafío personal:", error);
         res.status(500).json({ 
             error: "Error al asignar desafío personal",
             details: error.message 
@@ -239,7 +250,6 @@ export const getMyDailyQuest = async (req: Request, res: Response) => {
         res.status(200).json(dailyQuest);
 
     } catch (error: any) {
-        console.error("Error al obtener DailyQuest:", error);
         res.status(500).json({ 
             error: "Error al obtener DailyQuest",
             details: error.message 
@@ -303,7 +313,6 @@ export const unassignPersonalChallenge = async (req: Request, res: Response) => 
         });
 
     } catch (error: any) {
-        console.error("Error al desasignar desafío personal:", error);
         res.status(500).json({ 
             error: "Error al desasignar desafío personal",
             details: error.message 
@@ -371,13 +380,18 @@ export const rerollGlobalMission = async (req: Request, res: Response) => {
         const assignedChallengeIds = dailyQuest.missions.map(m => m.challengeId.toString());
 
         // Buscar un nuevo desafío global (excluyendo los ya asignados)
+        // Solo desafíos sin prerequisitos (los que tienen se desbloquean al completar el previo)
         const newChallenges = await Challenge.aggregate([
             { 
                 $match: { 
                     type: "global",
                     isActive: true,
                     'rules.minUserLevel': { $lte: user.level },
-                    _id: { $nin: assignedChallengeIds.map(id => new (require('mongoose').Types.ObjectId)(id)) }
+                    _id: { $nin: assignedChallengeIds.map(id => new (require('mongoose').Types.ObjectId)(id)) },
+                    $or: [
+                        { 'requirements.preRequisiteChallenge': { $exists: false } },
+                        { 'requirements.preRequisiteChallenge': null }
+                    ]
                 } 
             },
             { $sample: { size: 1 } }
@@ -414,7 +428,6 @@ export const rerollGlobalMission = async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        console.error("Error al hacer reroll:", error);
         res.status(500).json({ 
             error: "Error al hacer reroll",
             details: error.message 
@@ -466,20 +479,54 @@ export const completeMission = async (req: Request, res: Response) => {
             return res.status(404).json({ error: "Desafío no encontrado" });
         }
 
-        // Marcar como completada y asignar puntos
+        // Calcular puntos totales incluyendo bonus por dificultad
+        const basePoints = challenge.points;
+        const bonusPoints = calculateBonusPointsFromChallenge(basePoints, challenge.difficulty);
+        const totalPointsEarned = basePoints + bonusPoints;
+
+        // ✅ MANTENER la misión como completada (NO reemplazar)
         mission.status = "completed";
         mission.completedAt = new Date();
-        mission.pointsAwarded = challenge.points;
+        mission.pointsAwarded = totalPointsEarned;
 
-        await dailyQuest.save();
+        // Calcular información de nivel antes de actualizar
+        const levelInfoBefore = calculateUserLevelInfo(user.level, user.stats?.totalPoints || 0);
 
-        // Actualizar estadísticas del usuario
+        // Actualizar estadísticas del usuario (sumar puntos)
         user.stats = user.stats || { totalPoints: 0, weeklyPoints: 0, totalCompleted: 0, currentStreak: 0 };
-        user.stats.totalPoints += challenge.points;
-        user.stats.weeklyPoints += challenge.points;
+        user.stats.totalPoints += totalPointsEarned;
+        user.stats.weeklyPoints += totalPointsEarned;
         user.stats.totalCompleted += 1;
+        
+        // Actualizar streak
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(0, 0, 0, 0);
+        
+        const yesterdayQuest = await DailyQuest.findOne({
+            userId: user._id,
+            date: { $gte: yesterday, $lt: today }
+        });
+        
+        const hasCompletedYesterday = yesterdayQuest && yesterdayQuest.missions.some(m => m.status === "completed");
+        
+        if (hasCompletedYesterday || user.stats.currentStreak === 0) {
+            user.stats.currentStreak += 1;
+        } else {
+            user.stats.currentStreak = 1;
+        }
+        
         user.lastActive = new Date();
-        await user.save();
+        
+        // Calcular información de nivel después de actualizar puntos
+        const levelInfoAfter = calculateUserLevelInfo(user.level, user.stats.totalPoints);
+        
+        // Verificar si hay subida de nivel
+        const hasLeveledUp = await updateUserLevelIfNeeded(user);
+        
+        if (!hasLeveledUp) {
+            await user.save();
+        }
 
         // Actualizar estadísticas del desafío
         if (challenge.stats) {
@@ -491,17 +538,138 @@ export const completeMission = async (req: Request, res: Response) => {
         }
         await challenge.save();
 
-        await dailyQuest.populate('missions.challengeId');
-
-        res.status(200).json({
-            message: "¡Misión completada!",
-            pointsEarned: challenge.points,
-            dailyQuest,
-            userStats: user.stats
+        // 🔑 Verificar si este desafío desbloquea otro en la cadena
+        const nextChallenge = await Challenge.findOne({
+            type: "global",
+            isActive: true,
+            'requirements.preRequisiteChallenge': challenge._id,
+            'rules.minUserLevel': { $lte: user.level }
         });
 
+        let unlockedChallenge = null;
+        let assignedToSlot = null;
+
+        if (nextChallenge) {
+            // ✅ Verificar si el desafío desbloqueado ya existe O ya fue completado antes en el día
+            const alreadyExists = dailyQuest.missions.some(m => 
+                m.challengeId.toString() === nextChallenge._id.toString()
+            );
+
+            if (!alreadyExists) {
+                // 🎯 Verificar si el prerequisito completado ya había desbloqueado este desafío antes
+                // Buscar si existe otra misión con el mismo challengeId del prerequisito que ya está completada
+                const prerequisiteCompletedBefore = dailyQuest.missions.some(m => 
+                    m.challengeId.toString() === challenge._id.toString() && 
+                    m.slot !== slotNumber &&
+                    m.status === "completed"
+                );
+
+                if (!prerequisiteCompletedBefore) {
+                    // 🎯 Buscar un slot vacío o skipped en los primeros 3 slots (globales iniciales)
+                    let availableSlot = [1, 2, 3].find(slotNum => {
+                        const mission = dailyQuest.missions.find(m => m.slot === slotNum);
+                        return !mission || mission.status === "skipped";
+                    });
+
+                    // Si no hay espacio en slots 1-3, usar slot 6+ (saltar 4-5 que son solo personales)
+                    if (!availableSlot) {
+                        const usedSlots = dailyQuest.missions.map(m => m.slot).sort((a, b) => a - b);
+                        // Buscar el primer slot disponible comenzando desde 6
+                        availableSlot = 6;
+                        while (usedSlots.includes(availableSlot)) {
+                            availableSlot++;
+                        }
+                    }
+
+                    // Verificar si hay una misión skipped en el slot que pueda ser reemplazada
+                    const skippedIndex = dailyQuest.missions.findIndex(
+                        m => m.slot === availableSlot && m.status === "skipped"
+                    );
+                    
+                    if (skippedIndex !== -1) {
+                        // Reemplazar misión skipped
+                        dailyQuest.missions[skippedIndex].challengeId = nextChallenge._id;
+                        dailyQuest.missions[skippedIndex].type = "global";
+                        dailyQuest.missions[skippedIndex].status = "pending";
+                        dailyQuest.missions[skippedIndex].completedAt = null as any;
+                        dailyQuest.missions[skippedIndex].pointsAwarded = 0;
+                    } else {
+                        // Agregar nueva misión en slot disponible
+                        dailyQuest.missions.push({
+                            slot: availableSlot,
+                            challengeId: nextChallenge._id,
+                            type: "global",
+                            status: "pending",
+                            completedAt: null as any,
+                            pointsAwarded: 0
+                        } as any);
+                    }
+
+                    assignedToSlot = availableSlot;
+                    
+                    await Challenge.findByIdAndUpdate(
+                        nextChallenge._id,
+                        { $inc: { 'stats.timesAssigned': 1 } }
+                    );
+                    
+                    unlockedChallenge = {
+                        id: nextChallenge._id,
+                        title: nextChallenge.title,
+                        description: nextChallenge.description,
+                        category: nextChallenge.category,
+                        points: nextChallenge.points,
+                        difficulty: nextChallenge.difficulty,
+                        slot: assignedToSlot,
+                        message: "¡Nuevo desafío desbloqueado!"
+                    };
+                }
+            }
+        }
+
+        // Guardar el dailyQuest con la misión marcada como completada
+        await dailyQuest.save();
+        await dailyQuest.populate('missions.challengeId');
+
+        // Preparar respuesta
+        const finalLevelInfo = calculateUserLevelInfo(user.level, user.stats.totalPoints);
+        
+        const responseData: any = {
+            message: unlockedChallenge 
+                ? "¡Misión completada! Has desbloqueado un nuevo desafío" 
+                : "¡Misión completada!",
+            pointsEarned: basePoints,
+            bonusPoints: bonusPoints,
+            totalPointsAwarded: totalPointsEarned,
+            dailyQuest,
+            userStats: user.stats,
+            levelInfo: {
+                currentLevel: finalLevelInfo.currentLevel,
+                totalPoints: finalLevelInfo.totalPoints,
+                currentLevelPoints: finalLevelInfo.currentLevelPoints,
+                pointsToNextLevel: finalLevelInfo.pointsToNextLevel,
+                pointsRequiredForNextLevel: finalLevelInfo.pointsRequiredForNextLevel,
+                progressPercent: finalLevelInfo.progressPercent
+            }
+        };
+
+        // Si se desbloqueó un nuevo desafío, incluir la información
+        if (unlockedChallenge) {
+            responseData.unlockedChallenge = unlockedChallenge;
+        }
+
+        // ✅ Si hubo level up, incluir información
+        if (hasLeveledUp) {
+            responseData.levelUp = {
+                message: `¡Felicitaciones! Has subido al nivel ${finalLevelInfo.currentLevel}!`,
+                previousLevel: levelInfoBefore.currentLevel,
+                newLevel: finalLevelInfo.currentLevel,
+                pointsUsed: finalLevelInfo.totalPoints
+            };
+        }
+
+        res.status(200).json(responseData);
+
     } catch (error: any) {
-        console.error("Error al completar misión:", error);
         res.status(500).json({ 
             error: "Error al completar misión",
             details: error.message 
@@ -556,7 +724,6 @@ export const skipMission = async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        console.error("Error al skipear misión:", error);
         res.status(500).json({ 
             error: "Error al skipear misión",
             details: error.message 
@@ -614,9 +781,183 @@ export const getMyHistory = async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        console.error("Error al obtener historial:", error);
         res.status(500).json({ 
             error: "Error al obtener historial",
+            details: error.message 
+        });
+    }
+};
+
+// Cantidad promedio de missions skippeadas, pendientes y completadas (ultimos 15 dias)
+export const getAverageStatus = async (req: Request, res: Response) => {
+    try {
+        // Obtener todas las dailyQuests de los últimos 15 días
+        const fifteenDaysAgo = new Date();
+        fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+        fifteenDaysAgo.setHours(0, 0, 0, 0);
+
+        const dailyQuests = await DailyQuest.find({
+            date: { $gte: fifteenDaysAgo }
+        });
+
+        if (dailyQuests.length === 0) {
+            return res.status(200).json({
+                message: "No hay datos de los últimos 15 días",
+                totalSkipped: 0,
+                totalPending: 0,
+                totalCompleted: 0,
+                averageSkipped: "0%",
+                averagePending: "0%",
+                averageCompleted: "0%",
+                period: "Últimos 15 días"
+            });
+        }
+
+        let totalSkipped = 0;
+        let totalPending = 0;
+        let totalCompleted = 0;
+        let totalMissions = 0;
+
+        dailyQuests.forEach(quest => {
+            quest.missions.forEach(mission => {
+                totalMissions += 1;
+                if (mission.status === "skipped") {
+                    totalSkipped += 1;
+                } else if (mission.status === "pending") {
+                    totalPending += 1;
+                } else if (mission.status === "completed") {
+                    totalCompleted += 1;
+                }
+            });
+        });
+
+        // Calcular promedios en porcentaje
+        const averageSkipped = totalMissions > 0 ? ((totalSkipped / totalMissions) * 100).toFixed(1) : "0";
+        const averagePending = totalMissions > 0 ? ((totalPending / totalMissions) * 100).toFixed(1) : "0";
+        const averageCompleted = totalMissions > 0 ? ((totalCompleted / totalMissions) * 100).toFixed(1) : "0";
+
+        res.status(200).json({
+            totalSkipped,
+            totalPending,
+            totalCompleted,
+            averageSkipped: `${averageSkipped}%`,
+            averagePending: `${averagePending}%`,
+            averageCompleted: `${averageCompleted}%`,
+            period: "Últimos 15 días"
+        });
+
+    } catch (error: any) {
+        res.status(500).json({ 
+            error: "Error al obtener promedios de skip, pending, completed",
+            details: error.message 
+        });
+    }
+};
+
+// Cantidad de missions personal y cantidad de missions global y % de completadas
+export const getMissionTypeStats = async (req: Request, res: Response) => {
+    try {
+        const totalMissionsGlobal = await DailyQuest.aggregate([
+            { $unwind: "$missions" },
+            { $match: { "missions.type": "global" } },
+            { $group: { _id: null, count: { $sum: 1 } } }
+        ]);
+
+        const totalMissionsPersonal = await DailyQuest.aggregate([
+            { $unwind: "$missions" },
+            { $match: { "missions.type": "personal" } },
+            { $group: { _id: null, count: { $sum: 1 } } }
+        ]);
+
+        const completedMissionsGlobal = await DailyQuest.aggregate([
+            { $unwind: "$missions" },
+            { $match: { 
+                "missions.type": "global",
+                "missions.status": "completed"
+            }},
+            { $group: { _id: null, count: { $sum: 1 } } }
+        ]);
+
+        const completedMissionsPersonal = await DailyQuest.aggregate([
+            { $unwind: "$missions" },
+            { $match: { 
+                "missions.type": "personal",
+                "missions.status": "completed"
+            }},
+            { $group: { _id: null, count: { $sum: 1 } } }
+        ]);
+
+        const totalGlobal = totalMissionsGlobal[0]?.count || 0;
+        const totalPersonal = totalMissionsPersonal[0]?.count || 0;
+        const completedGlobal = completedMissionsGlobal[0]?.count || 0;
+        const completedPersonal = completedMissionsPersonal[0]?.count || 0;
+
+        // Calcular porcentajes
+        const percentageGlobalCompleted = totalGlobal > 0 
+            ? ((completedGlobal / totalGlobal) * 100).toFixed(1) 
+            : 0;
+
+        const percentagePersonalCompleted = totalPersonal > 0 
+            ? ((completedPersonal / totalPersonal) * 100).toFixed(1) 
+            : 0;
+
+        res.status(200).json({
+            global: {
+                total: totalGlobal,
+                completed: completedGlobal,
+                percentageCompleted: `${percentageGlobalCompleted}%`
+            },
+            personal: {
+                total: totalPersonal,
+                completed: completedPersonal,
+                percentageCompleted: `${percentagePersonalCompleted}%`
+            }
+        });
+
+    } catch (error: any) {
+        res.status(500).json({ 
+            error: "Error al obtener estadísticas de misiones",
+            details: error.message 
+        });
+    }
+};
+
+// Verificar y actualizar nivel del usuario basado en puntos totales
+export const checkAndUpdateLevel = async (req: Request, res: Response) => {
+    try {
+        const userEmail = req.user?.email;
+
+        const user = await User.findOne({ email: userEmail });
+        if (!user) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        // Calcular información de nivel antes de la actualización
+        const levelInfoBefore = calculateUserLevelInfo(user.level, user.stats?.totalPoints || 0);
+        
+        // Verificar si necesita actualizar nivel
+        const hasLeveledUp = await updateUserLevelIfNeeded(user);
+        
+        // Calcular información después de la actualización
+        const levelInfoAfter = calculateUserLevelInfo(user.level, user.stats?.totalPoints || 0);
+
+        const response: any = {
+            message: hasLeveledUp ? "¡Nivel actualizado!" : "Tu nivel está actualizado",
+            levelInfo: {
+                currentLevel: levelInfoAfter.currentLevel,
+                totalPoints: levelInfoAfter.totalPoints,
+                currentLevelPoints: levelInfoAfter.currentLevelPoints,
+                pointsToNextLevel: levelInfoAfter.pointsToNextLevel,
+                progressPercent: levelInfoAfter.progressPercent
+            },
+            userStats: user.stats
+        };
+
+        res.status(200).json(response);
+
+    } catch (error: any) {
+        res.status(500).json({ 
+            error: "Error al verificar nivel del usuario",
             details: error.message 
         });
     }

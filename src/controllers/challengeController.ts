@@ -6,7 +6,7 @@ import User from "../models/user";
 export const getAllChallenges = async (req: Request, res: Response) => {
     try {
         const { type, category, difficulty, isActive } = req.query;
-        
+
         const filter: any = {};
         if (type) filter.type = type;
         if (category) filter.category = category;
@@ -14,15 +14,15 @@ export const getAllChallenges = async (req: Request, res: Response) => {
         if (isActive !== undefined) filter.isActive = isActive === 'true';
 
         const challenges = await Challenge.find(filter)
-            .populate('ownerUser', 'userName profile.displayName')
+            .populate('ownerUser', 'userName profile.displayName profile.isPublic')
             .sort({ createdAt: -1 });
 
         res.status(200).json(challenges);
     } catch (error: any) {
         console.error("Error al obtener desafíos:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Error al obtener desafíos",
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -33,7 +33,7 @@ export const getChallengeById = async (req: Request, res: Response) => {
         const { id } = req.params;
 
         const challenge = await Challenge.findById(id)
-            .populate('ownerUser', 'userName profile.displayName')
+            .populate('ownerUser', 'userName profile.displayName profile.isPublic')
             .populate('requirements.preRequisiteChallenge', 'title');
 
         if (!challenge) {
@@ -43,9 +43,9 @@ export const getChallengeById = async (req: Request, res: Response) => {
         res.status(200).json(challenge);
     } catch (error: any) {
         console.error("Error al obtener desafío:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Error al obtener desafío",
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -53,10 +53,10 @@ export const getChallengeById = async (req: Request, res: Response) => {
 // Crear un nuevo desafío
 export const createChallenge = async (req: Request, res: Response) => {
     try {
-        const { 
-            type, ownerUser, title, description, category, difficulty, 
-            points, isActive, tags, minLevel, preRequisiteChallenge, 
-            maxPerDay, minUserLevel 
+        const {
+            type, ownerUser, title, description, category, difficulty,
+            points, isActive, tags, minLevel, preRequisiteChallenge,
+            maxPerDay, minUserLevel
         } = req.body;
 
         const userRole = (req as any).user?.role;
@@ -64,14 +64,14 @@ export const createChallenge = async (req: Request, res: Response) => {
 
         // Validar permisos según tipo de desafío
         if (type === "global" && userRole !== "Administrador") {
-            return res.status(403).json({ 
-                error: "Solo los administradores pueden crear desafíos globales" 
+            return res.status(403).json({
+                error: "Solo los administradores pueden crear desafíos globales"
             });
         }
 
         if (type === "personal" && userRole === "Administrador") {
-            return res.status(400).json({ 
-                error: "Los administradores solo pueden crear desafíos globales" 
+            return res.status(400).json({
+                error: "Los administradores solo pueden crear desafíos globales"
             });
         }
 
@@ -112,9 +112,9 @@ export const createChallenge = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error("Error al crear desafío:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Error al crear desafío",
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -123,11 +123,10 @@ export const createChallenge = async (req: Request, res: Response) => {
 export const updateChallenge = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const updateData: any = { ...req.body };
         const userRole = (req as any).user?.role;
         const userEmail = (req as any).user?.email;
 
-        // Buscar el desafío primero (SIN populate porq generaba problemas)
+        // Buscar el desafío primero
         const challenge = await Challenge.findById(id);
 
         if (!challenge) {
@@ -138,39 +137,49 @@ export const updateChallenge = async (req: Request, res: Response) => {
         if (userRole !== "Administrador") {
             const User = (await import("../models/user")).default;
             const currentUser = await User.findOne({ email: userEmail });
-            
-            if (!currentUser || !challenge.ownerUser || 
+
+            if (!currentUser || !challenge.ownerUser ||
                 challenge.ownerUser.toString() !== currentUser._id.toString()) {
-                return res.status(403).json({ 
-                    error: "No tienes permiso para editar este desafío" 
+                return res.status(403).json({
+                    error: "No tienes permiso para editar este desafío"
                 });
             }
         }
 
-        // Manejar campos anidados
-        if (req.body.minLevel !== undefined || req.body.preRequisiteChallenge !== undefined) {
-            updateData.requirements = {};
-            if (req.body.minLevel !== undefined) updateData.requirements.minLevel = req.body.minLevel;
-            if (req.body.preRequisiteChallenge !== undefined) updateData.requirements.preRequisiteChallenge = req.body.preRequisiteChallenge;
+        // Actualizar campos directos
+        if (req.body.title !== undefined) challenge.title = req.body.title;
+        if (req.body.description !== undefined) challenge.description = req.body.description;
+        if (req.body.category !== undefined) challenge.category = req.body.category;
+        if (req.body.difficulty !== undefined) challenge.difficulty = req.body.difficulty;
+        if (req.body.points !== undefined) challenge.points = req.body.points;
+        if (req.body.tags !== undefined) challenge.tags = req.body.tags;
+        if (req.body.isActive !== undefined) challenge.isActive = req.body.isActive;
+
+        // Actualizar campos de requirements
+        if (challenge.requirements === undefined || challenge.requirements === null) {
+            challenge.requirements = { minLevel: 0, preRequisiteChallenge: null };
         }
-
-        if (req.body.maxPerDay !== undefined || req.body.minUserLevel !== undefined) {
-            updateData.rules = {};
-            if (req.body.maxPerDay !== undefined) updateData.rules.maxPerDay = req.body.maxPerDay;
-            if (req.body.minUserLevel !== undefined) updateData.rules.minUserLevel = req.body.minUserLevel;
+        else {
+            if (req.body.minLevel !== undefined) {
+                challenge.requirements.minLevel = req.body.minLevel;
+            }
+            if (req.body.preRequisiteChallenge !== undefined) {
+                challenge.requirements.preRequisiteChallenge = req.body.preRequisiteChallenge || null;
+            }
         }
-
-        // Limpiar campos que se manejaron como anidados
-        delete updateData.minLevel;
-        delete updateData.preRequisiteChallenge;
-        delete updateData.maxPerDay;
-        delete updateData.minUserLevel;
-
-        const updatedChallenge = await Challenge.findByIdAndUpdate(
-            id,
-            updateData,
-            { new: true, runValidators: true }
-        );
+        // Actualizar campos de rules
+        if (challenge.rules === undefined || challenge.rules === null) {
+            challenge.rules = { maxPerDay: 1, minUserLevel: 0 };
+        }
+        else {
+            if (req.body.maxPerDay !== undefined) {
+                challenge.rules.maxPerDay = req.body.maxPerDay;
+            }
+            if (req.body.minUserLevel !== undefined) {
+                challenge.rules.minUserLevel = req.body.minUserLevel;
+            }
+        }
+        const updatedChallenge = await challenge.save();
 
         res.status(200).json({
             message: "Desafío actualizado exitosamente",
@@ -178,9 +187,9 @@ export const updateChallenge = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error("Error al actualizar desafío:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Error al actualizar desafío",
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -216,9 +225,9 @@ export const deleteChallenge = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error("Error al desactivar desafío:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Error al desactivar desafío",
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -241,11 +250,11 @@ export const reactivateChallenge = async (req: Request, res: Response) => {
         if (userRole !== "Administrador") {
             const User = (await import("../models/user")).default;
             const currentUser = await User.findOne({ email: userEmail });
-            
-            if (!currentUser || !challenge.ownerUser || 
+
+            if (!currentUser || !challenge.ownerUser ||
                 challenge.ownerUser.toString() !== currentUser._id.toString()) {
-                return res.status(403).json({ 
-                    error: "No tienes permiso para reactivar este desafío" 
+                return res.status(403).json({
+                    error: "No tienes permiso para reactivar este desafío"
                 });
             }
         }
@@ -260,9 +269,9 @@ export const reactivateChallenge = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error("Error al reactivar desafío:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Error al reactivar desafío",
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -273,15 +282,15 @@ export const getChallengesByCategory = async (req: Request, res: Response) => {
         const { category } = req.params;
 
         const challenges = await Challenge.find({ category, isActive: true })
-            .populate('ownerUser', 'userName profile.displayName')
+            .populate('ownerUser', 'userName profile.displayName profile.isPublic')
             .sort({ difficulty: 1, points: -1 });
 
         res.status(200).json(challenges);
     } catch (error: any) {
         console.error("Error al obtener desafíos por categoría:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Error al obtener desafíos",
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -303,9 +312,9 @@ export const getRandomChallenges = async (req: Request, res: Response) => {
         res.status(200).json(challenges);
     } catch (error: any) {
         console.error("Error al obtener desafíos random:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Error al obtener desafíos random",
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -331,9 +340,9 @@ export const incrementAssigned = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error("Error al actualizar estadística:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Error al actualizar estadística",
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -349,7 +358,7 @@ export const completeChallenge = async (req: Request, res: Response) => {
             return res.status(404).json({ error: "Desafío no encontrado" });
         }
 
-        // Verificar que stats existe
+        // Verificar que stats existe e inicializar si es necesario
         if (!challenge.stats) {
             challenge.stats = {
                 timesAssigned: 0,
@@ -361,10 +370,13 @@ export const completeChallenge = async (req: Request, res: Response) => {
         // Incrementar completados
         challenge.stats.timesCompleted += 1;
 
-        // Calcular tasa de completación
+        // Calcular tasa de completación (evitar división por cero)
         if (challenge.stats.timesAssigned > 0) {
-            challenge.stats.completionRate = 
-                (challenge.stats.timesCompleted / challenge.stats.timesAssigned) * 100;
+            challenge.stats.completionRate =
+                Math.round((challenge.stats.timesCompleted / challenge.stats.timesAssigned) * 100 * 100) / 100; // Redondear a 2 decimales
+        } else {
+            // Si no hay asignaciones registradas, pero sí completaciones, asumir 100%
+            challenge.stats.completionRate = 100;
         }
 
         await challenge.save();
@@ -375,9 +387,9 @@ export const completeChallenge = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error("Error al completar desafío:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Error al completar desafío",
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -412,9 +424,54 @@ export const getChallengeStats = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error("Error al obtener estadísticas:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Error al obtener estadísticas",
-            details: error.message 
+            details: error.message
         });
     }
 };
+
+// Obtener estadísticas por categoría de desafíos
+export const getChallengeTypeComplete = async (req: Request, res: Response) => {
+    try {
+        // Obtener estadísticas por categoría de desafío
+        const statsByCategory = await Challenge.aggregate([
+            {
+                $group: {
+                    _id: "$category",
+                    totalAssigned: { $sum: "$stats.timesAssigned" },
+                    totalCompleted: { $sum: "$stats.timesCompleted" },
+                    totalChallenges: { $sum: 1 }
+                }
+            },
+            {
+                $project: {
+                    category: "$_id",
+                    totalAssigned: 1,
+                    totalCompleted: 1,
+                    totalChallenges: 1,
+                    _id: 0
+                }
+            },
+            {
+                $sort: { totalCompleted: -1 }
+            }
+        ]);
+
+        res.status(200).json({
+            data: statsByCategory.map(stat => ({
+                category: stat.category,
+                totalChallenges: stat.totalChallenges,
+                totalAssigned: stat.totalAssigned,
+                totalCompleted: stat.totalCompleted
+            }))
+        });
+
+    } catch (error: any) {
+        console.error("Error al obtener estadísticas por categoría:", error);
+        res.status(500).json({
+            error: "Error al obtener estadísticas por categoría",
+            details: error.message
+        });
+    }
+}
