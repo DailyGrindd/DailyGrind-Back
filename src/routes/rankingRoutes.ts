@@ -1,4 +1,3 @@
-// src/routes/rankingRoutes.ts
 import { Router } from "express";
 import { 
     getGlobalRanking, 

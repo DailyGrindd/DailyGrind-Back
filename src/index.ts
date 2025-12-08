@@ -16,7 +16,7 @@ const mongoUri = process.env.MONGODB_URI!;
 
 app.use(express.json({ limit: '10mb' }));
 app.use(cors({
-    origin: 'http://localhost:5173',
+    origin: 'https://daily-grind-front-329e.vercel.app',
     credentials: true
 }));
 app.use(cookieParser());
