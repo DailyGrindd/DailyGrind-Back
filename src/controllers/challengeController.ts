@@ -219,6 +219,26 @@ export const deleteChallenge = async (req: Request, res: Response) => {
         challenge.isActive = false;
         await challenge.save();
 
+        // Si es un desafío personal, removerlo de los DailyQuests donde esté asignado
+        if (challenge.type === "personal") {
+            const DailyQuest = (await import("../models/dailyQuest")).default;
+            
+            // Remover este desafío de todos los DailyQuests (solo en slots 4 y 5, que son personales)
+            await DailyQuest.updateMany(
+                { 
+                    'missions.challengeId': challenge._id,
+                    'missions.slot': { $in: [4, 5] }
+                },
+                { 
+                    $pull: { 
+                        missions: { 
+                            challengeId: challenge._id 
+                        } 
+                    } 
+                }
+            );
+        }
+
         res.status(200).json({
             message: "Desafío desactivado exitosamente",
             challenge

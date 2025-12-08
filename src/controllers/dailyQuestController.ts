@@ -284,7 +284,7 @@ export const unassignPersonalChallenge = async (req: Request, res: Response) => 
         const dailyQuest = await DailyQuest.findOne({
             userId: user._id,
             date: { $gte: today, $lt: tomorrow }
-        });
+        }).populate('missions.challengeId');
 
         if (!dailyQuest) {
             return res.status(404).json({ error: "No tienes misiones para hoy" });
@@ -305,6 +305,9 @@ export const unassignPersonalChallenge = async (req: Request, res: Response) => 
 
         // Remover la misión
         dailyQuest.missions.splice(missionIndex, 1);
+        
+        // Marcar como modificado para asegurar que Mongoose detecte el cambio
+        dailyQuest.markModified('missions');
         await dailyQuest.save();
 
         res.status(200).json({
@@ -697,7 +700,7 @@ export const skipMission = async (req: Request, res: Response) => {
         const dailyQuest = await DailyQuest.findOne({
             userId: user._id,
             date: { $gte: today, $lt: tomorrow }
-        });
+        }).populate('missions.challengeId');
 
         if (!dailyQuest) {
             return res.status(404).json({ error: "No tienes misiones para hoy" });
