@@ -40,7 +40,6 @@ Las entidades principales son:
  git clone https://github.com/DailyGrindd/DailyGrind-Back.git
 ```
 - Crear un archivo `.env` en la raíz del proyecto basado en `.envexample`
-- Crear un archivo `serviceAccountKey.json` en la raíz del proyecto basado en `accountkeyexample.txt`
 ```bash
  # Instalar dependencias
  npm install
