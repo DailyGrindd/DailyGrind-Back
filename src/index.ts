@@ -18,7 +18,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(cors({
     origin: [
         'https://daily-grind-front-329e.vercel.app',
-        'http://localhost:3000/'
+        'http://localhost:5173/'
     ],
     credentials: true
 }));
