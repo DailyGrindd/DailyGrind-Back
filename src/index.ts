@@ -21,7 +21,6 @@ const corsOptions = {
     origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
         const allowedOrigins = [
             'https://dailygrindd.vercel.app',
-            'https://daily-grind-front-329e.vercel.app',
             'http://localhost:5173'
         ];
 
