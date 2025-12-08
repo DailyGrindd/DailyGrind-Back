@@ -156,15 +156,15 @@ export const login = async (req: Request, res: Response) => {
         res.cookie("accessToken", accessToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            maxAge: 15 * 60 * 1000, // 15m
+            sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+            maxAge: 15 * 60 * 1000, 
         });
 
         res.cookie("refreshToken", refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7d
+            sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000, 
         });
 
         res.status(200).json({ 
@@ -319,15 +319,15 @@ export const firebaseRegister = async (req: Request, res: Response) => {
         res.cookie("accessToken", accessToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            maxAge: 15 * 60 * 1000, // 15m
+            sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+            maxAge: 15 * 60 * 1000, /* Lines 400-401 omitted */
         });
 
         res.cookie("refreshToken", refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7d
+            sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000, /* Lines 407-408 omitted */
         });
 
         res.status(201).json({
@@ -396,14 +396,14 @@ export const firebaseLogin = async (req: Request, res: Response) => {
         res.cookie("accessToken", accessToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
             maxAge: 15 * 60 * 1000, // 15m
         });
 
         res.cookie("refreshToken", refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7d
         });
 

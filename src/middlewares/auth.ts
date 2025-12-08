@@ -43,7 +43,7 @@ export function validateRefreshToken(req: Request, res: Response, next: NextFunc
         res.cookie("accessToken", newAccessToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
             maxAge: 15 * 60 * 1000, // 15m
         });
 
