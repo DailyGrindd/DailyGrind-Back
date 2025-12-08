@@ -155,15 +155,15 @@ export const login = async (req: Request, res: Response) => {
         // Cookie 
         res.cookie("accessToken", accessToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            secure: true, // Siempre true para HTTPS
+            sameSite: "none", // Necesario para dominios cruzados
             maxAge: 15 * 60 * 1000, // 15m
         });
 
         res.cookie("refreshToken", refreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            secure: true, // Siempre true para HTTPS
+            sameSite: "none", // Necesario para dominios cruzados
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7d
         });
 
@@ -188,8 +188,17 @@ export const login = async (req: Request, res: Response) => {
 
 // Logout de usuarios
 export const logout = async (req: Request, res: Response) => {
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
+    // Limpiar cookies con las mismas opciones que al crearlas
+    res.clearCookie('accessToken', {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none"
+    });
+    res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none"
+    });
     return res.json({ message: "Logout exitoso" });
 }
 
@@ -318,15 +327,15 @@ export const firebaseRegister = async (req: Request, res: Response) => {
         // Establecer cookies
         res.cookie("accessToken", accessToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            secure: true, // Siempre true para HTTPS
+            sameSite: "none", // Necesario para dominios cruzados
             maxAge: 15 * 60 * 1000, // 15m
         });
 
         res.cookie("refreshToken", refreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            secure: true, // Siempre true para HTTPS
+            sameSite: "none", // Necesario para dominios cruzados
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7d
         });
 
@@ -395,15 +404,15 @@ export const firebaseLogin = async (req: Request, res: Response) => {
         // Establecer cookies
         res.cookie("accessToken", accessToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            secure: true, // Siempre true para HTTPS
+            sameSite: "none", // Necesario para dominios cruzados
             maxAge: 15 * 60 * 1000, // 15m
         });
 
         res.cookie("refreshToken", refreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            secure: true, // Siempre true para HTTPS
+            sameSite: "none", // Necesario para dominios cruzados
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7d
         });
 
