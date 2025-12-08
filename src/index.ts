@@ -20,7 +20,10 @@ app.use(cors({
         'https://daily-grind-front-329e.vercel.app',
         'http://localhost:5173'
     ],
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    maxAge: 86400
 }));
 app.use(cookieParser());
 

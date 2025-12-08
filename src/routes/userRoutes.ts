@@ -6,6 +6,14 @@ import { verifyToken, requireRole } from "../middlewares/auth";
 
 const router = express.Router();
 
+// GET - Rutas específicas PRIMERO (antes de :email)
+router.get("/level/info", verifyToken, getMyLevelInfo);
+router.get("/level/ranking", getLevelRanking);
+router.get("/level/stats", verifyToken, requireRole('Administrador'), getLevelStats);
+router.get("/access/user", verifyToken, userAccess);
+router.get("/check-availability", checkAvailability);
+router.get("/zone-stats", verifyToken, requireRole('Administrador'), getUserCountZone);
+
 // POST - Rutas específicas PRIMERO
 router.post("/sync-levels", verifyToken, requireRole('Administrador'), syncAllUserLevels);
 router.post("/firebase-register", firebaseRegister);
@@ -20,13 +28,7 @@ router.put("/:email/activate", verifyToken, requireRole('Administrador'), activa
 router.put("/:email/desactivate", verifyToken, requireRole('Administrador'), deleteUser);
 router.put("/:email", verifyToken, requireRole('Administrador'), validationMiddleware(UpdateUserDto), updateUser);
 
-// GET 
-router.get("/level/info", verifyToken, getMyLevelInfo);
-router.get("/level/ranking", getLevelRanking);
-router.get("/level/stats", verifyToken, requireRole('Administrador'), getLevelStats);
-router.get("/access/user", verifyToken, userAccess);
-router.get("/check-availability", checkAvailability);
-router.get("/zone-stats", verifyToken, requireRole('Administrador'), getUserCountZone);
+// GET - Rutas genéricas con parámetros AL FINAL
 router.get("/:email", verifyToken, requireRole('Administrador'), getUser);
 router.get("/", verifyToken, requireRole('Administrador'), getUsers);
 

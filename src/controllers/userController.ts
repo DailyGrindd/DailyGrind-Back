@@ -16,8 +16,9 @@ export const getUsers = async (req: Request, res: Response) => {
             users = await User.find().select('-profile -stats');
         }
         res.status(200).json(users);
-    } catch (error) {
-        res.status(500).json({ error: error });
+    } catch (error: any) {
+        console.error("Error al obtener usuarios:", error);
+        res.status(500).json({ error: "Error al obtener usuarios", details: error.message });
     }
 };
 
@@ -27,8 +28,9 @@ export const getUser = async (req: Request, res: Response) => {
         const user = await User.findOne({ email: req.params.email });
         if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
         res.status(200).json(user);
-    } catch (error) {
-        res.status(500).json({ error: error });
+    } catch (error: any) {
+        console.error("Error al obtener usuario:", error);
+        res.status(500).json({ error: "Error al obtener usuario", details: error.message });
     }
 };
 
@@ -44,8 +46,9 @@ export const createUser = async (req: Request, res: Response) => {
         });
 
         res.status(201).json(user);
-    } catch (error) {
-        res.status(500).json({ error: error });
+    } catch (error: any) {
+        console.error("Error al crear usuario:", error);
+        res.status(500).json({ error: "Error al crear usuario", details: error.message });
     }
 };
 
@@ -61,8 +64,9 @@ export const registerUser = async (req: Request, res: Response) => {
         });
 
         res.status(201).json({ user: { email: user.email, role: user.role, level: user.level, displayName: user.profile?.displayName, totalPoints: user.stats?.totalPoints, avatarUrl: user.profile?.avatarUrl }});
-    } catch (error) {
-        res.status(500).json({ error: error });
+    } catch (error: any) {
+        console.error("Error al registrar usuario:", error);
+        res.status(500).json({ error: "Error al registrar usuario", details: error.message });
     }
 };
 
@@ -90,8 +94,9 @@ export const updateUser = async (req: Request, res: Response) => {
         await user.save();
         res.status(200).json({ message: "Usuario actualizado correctamente", user });
         
-    } catch (error) {
-        res.status(500).json({ error: error });
+    } catch (error: any) {
+        console.error("Error al actualizar usuario:", error);
+        res.status(500).json({ error: "Error al actualizar usuario", details: error.message });
     }
 }
 
@@ -105,8 +110,9 @@ export const deleteUser = async (req: Request, res: Response) => {
         await user.save();
         
         res.status(200).json({ message: "Usuario dado de baja correctamente" });
-    } catch (error) {
-        res.status(500).json({ error: error });
+    } catch (error: any) {
+        console.error("Error al desactivar usuario:", error);
+        res.status(500).json({ error: "Error al desactivar usuario", details: error.message });
     }
 }
 
@@ -120,8 +126,9 @@ export const activateUser = async (req: Request, res: Response) => {
         await user.save();
         
         res.status(200).json({ message: "Usuario dado de alta correctamente" });
-    } catch (error) {
-        res.status(500).json({ error: error });
+    } catch (error: any) {
+        console.error("Error al activar usuario:", error);
+        res.status(500).json({ error: "Error al activar usuario", details: error.message });
     }
 }
 
