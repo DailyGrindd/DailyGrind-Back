@@ -18,11 +18,24 @@ import { requireRole, verifyToken } from "../middlewares/auth";
 
 const router = express.Router();
 
+// Completar una misión (cualquier slot)
+router.patch("/complete/:slot", verifyToken, completeMission);
+
+// Desasignar desafío PERSONAL (slots 4 y 5)
+router.delete("/unassign-personal/:slot", verifyToken, unassignPersonalChallenge);
+
+// Skipear una misión (cualquier slot)
+router.patch("/skip/:slot", verifyToken, skipMission);
+
+// Reroll de una misión GLOBAL específica (slots 1, 2, 3) - máximo 3 rerolls por día
+router.patch("/reroll/:slot", verifyToken, rerollGlobalMission);
+
 // Inicializar/Obtener DailyQuest de hoy (auto-genera 3 misiones globales si no existe)
 router.get("/initialize", verifyToken, initializeDailyQuest);
 
 // Obtener mis misiones de hoy
 router.get("/my-daily", verifyToken, getMyDailyQuest);
+
 
 // Verificar y actualizar nivel del usuario
 router.get("/check-level", verifyToken, checkAndUpdateLevel);
@@ -38,17 +51,5 @@ router.get("/mission-typestats", verifyToken, requireRole('Administrador'), getM
 
 // Asignar desafío PERSONAL manualmente (slots 4 y 5)
 router.post("/assign-personal", verifyToken, validationMiddleware(AssignChallengeDto), assignPersonalChallenge);
-
-// Desasignar desafío PERSONAL (slots 4 y 5)
-router.delete("/unassign-personal/:slot", verifyToken, unassignPersonalChallenge);
-
-// Reroll de una misión GLOBAL específica (slots 1, 2, 3) - máximo 3 rerolls por día
-router.patch("/reroll/:slot", verifyToken, rerollGlobalMission);
-
-// Completar una misión (cualquier slot)
-router.patch("/complete/:slot", verifyToken, completeMission);
-
-// Skipear una misión (cualquier slot)
-router.patch("/skip/:slot", verifyToken, skipMission);
 
 export default router;
