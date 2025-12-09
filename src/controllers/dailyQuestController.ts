@@ -568,45 +568,25 @@ export const completeMission = async (req: Request, res: Response) => {
                 );
 
                 if (!prerequisiteCompletedBefore) {
-                    // 🎯 Buscar un slot vacío o skipped en los primeros 3 slots (globales iniciales)
-                    let availableSlot = [1, 2, 3].find(slotNum => {
-                        const mission = dailyQuest.missions.find(m => m.slot === slotNum);
-                        return !mission || mission.status === "skipped";
-                    });
-
-                    // Si no hay espacio en slots 1-3, usar slot 6+ (saltar 4-5 que son solo personales)
-                    if (!availableSlot) {
-                        const usedSlots = dailyQuest.missions.map(m => m.slot).sort((a, b) => a - b);
-                        // Buscar el primer slot disponible comenzando desde 6
-                        availableSlot = 6;
-                        while (usedSlots.includes(availableSlot)) {
-                            availableSlot++;
-                        }
-                    }
-
-                    // Verificar si hay una misión skipped en el slot que pueda ser reemplazada
-                    const skippedIndex = dailyQuest.missions.findIndex(
-                        m => m.slot === availableSlot && m.status === "skipped"
-                    );
+                    // 🎯 Los desafíos desbloqueados SIEMPRE se asignan a partir del slot 6
+                    // (slots 1-3 son para misiones iniciales, 4-5 para personales)
+                    const usedSlots = dailyQuest.missions.map(m => m.slot).sort((a, b) => a - b);
                     
-                    if (skippedIndex !== -1) {
-                        // Reemplazar misión skipped
-                        dailyQuest.missions[skippedIndex].challengeId = nextChallenge._id;
-                        dailyQuest.missions[skippedIndex].type = "global";
-                        dailyQuest.missions[skippedIndex].status = "pending";
-                        dailyQuest.missions[skippedIndex].completedAt = null as any;
-                        dailyQuest.missions[skippedIndex].pointsAwarded = 0;
-                    } else {
-                        // Agregar nueva misión en slot disponible
-                        dailyQuest.missions.push({
-                            slot: availableSlot,
-                            challengeId: nextChallenge._id,
-                            type: "global",
-                            status: "pending",
-                            completedAt: null as any,
-                            pointsAwarded: 0
-                        } as any);
+                    // Buscar el primer slot disponible comenzando desde 6
+                    let availableSlot = 6;
+                    while (usedSlots.includes(availableSlot)) {
+                        availableSlot++;
                     }
+
+                    // Agregar nueva misión en slot disponible
+                    dailyQuest.missions.push({
+                        slot: availableSlot,
+                        challengeId: nextChallenge._id,
+                        type: "global",
+                        status: "pending",
+                        completedAt: null as any,
+                        pointsAwarded: 0
+                    } as any);
 
                     assignedToSlot = availableSlot;
                     
